@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.formats import router as formats_router
 from app.api.health import router as health_router
 from app.api.repurpose import router as repurpose_router
+from app.api.subscription import router as subscription_router
 
 
 def create_app() -> FastAPI:
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(repurpose_router)
     app.include_router(formats_router)
+    app.include_router(subscription_router)
 
     return app
 
