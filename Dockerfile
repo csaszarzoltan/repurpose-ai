@@ -13,8 +13,8 @@ COPY pyproject.toml ./
 # Install Python dependencies
 RUN pip install --no-cache-dir -e ".[dev]" || pip install --no-cache-dir fastapi uvicorn pydantic httpx
 
-# Copy application code
-COPY src/ src/
+# Copy application code (src/app → /app/app so `app.main:app` resolves)
+COPY src/app/ app/
 
 # Expose port
 EXPOSE 8000
