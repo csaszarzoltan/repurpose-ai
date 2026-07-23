@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class ContentFormat(str, Enum):
+class ContentFormat(StrEnum):
     """Supported content formats."""
     BLOG_POST = "blog_post"
     TWITTER_THREAD = "twitter_thread"
@@ -21,7 +20,7 @@ class ContentFormat(str, Enum):
     SOCIAL_MEDIA = "social_media"
 
 
-class BrandVoice(str, Enum):
+class BrandVoice(StrEnum):
     """Brand voice presets."""
     PROFESSIONAL = "professional"
     CASUAL = "casual"
@@ -33,12 +32,12 @@ class BrandVoice(str, Enum):
 
 class ContentItem(BaseModel):
     """A piece of content to be repurposed."""
-    id: Optional[str] = None
+    id: str | None = None
     title: str
     body: str
     source_format: ContentFormat
     tags: list[str] = Field(default_factory=list)
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
 
 
 class RepurposeRequest(BaseModel):
@@ -46,7 +45,7 @@ class RepurposeRequest(BaseModel):
     content: ContentItem
     target_formats: list[ContentFormat]
     brand_voice: BrandVoice = BrandVoice.PROFESSIONAL
-    custom_instructions: Optional[str] = None
+    custom_instructions: str | None = None
 
 
 class RepurposeResponse(BaseModel):

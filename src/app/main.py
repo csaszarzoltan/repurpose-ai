@@ -3,9 +3,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.formats import router as formats_router
 from app.api.health import router as health_router
 from app.api.repurpose import router as repurpose_router
-from app.api.formats import router as formats_router
 
 
 def create_app() -> FastAPI:

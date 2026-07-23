@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import ipaddress
-from typing import Optional
+import socket
 
 
 def is_private_address(host: str) -> bool:
     """Check if a host string is a private/reserved IP address."""
-    raise NotImplementedError
+    try:
+        addr = ipaddress.ip_address(host)
+        return addr.is_private or addr.is_loopback
+    except ValueError:
+        return False
 
 
-def resolve_host(host: str) -> Optional[str]:
+def resolve_host(host: str) -> str | None:
     """Resolve a hostname to an IP address."""
-    raise NotImplementedError
+    try:
+        return socket.gethostbyname(host)
+    except socket.gaierror:
+        return None
 
 
 def validate_port(port: int) -> bool:
     """Check if a port number is valid (1-65535)."""
-    raise NotImplementedError
+    return 1 <= port <= 65535
