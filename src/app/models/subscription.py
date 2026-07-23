@@ -1,46 +1,52 @@
-"""Subscription and billing models for RepurposeAI."""
+"""Subscription models for RepurposeAI billing."""
 
 from __future__ import annotations
 
-from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class SubscriptionTier(StrEnum):
     """Subscription tier options."""
+
     FREE = "free"
     PRO = "pro"
 
 
 class SubscriptionStatus(StrEnum):
-    """Subscription status states."""
+    """Subscription status options."""
+
     ACTIVE = "active"
     PAST_DUE = "past_due"
     CANCELED = "canceled"
 
 
 class SubscriptionRequest(BaseModel):
-    """Request to create or update a subscription."""
-    tier: SubscriptionTier
+    """Request to create or update a subscription.
+
+    tier is a plain string; the API handler validates it and
+    returns 400 for invalid values (instead of Pydantic's default 422).
+    """
+
+    tier: str
     user_id: str
 
 
 class SubscriptionResponse(BaseModel):
-    """Response containing subscription details."""
+    """Response after creating/updating a subscription."""
+
     subscription_id: str
     user_id: str
     tier: SubscriptionTier
     status: SubscriptionStatus
-    monthly_limit: int
+    monthly_limit: int  # -1 for unlimited
     current_usage: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class SubscriptionStatusResponse(BaseModel):
     """Response for subscription status query."""
+
     user_id: str
     tier: SubscriptionTier
     status: SubscriptionStatus
@@ -51,6 +57,7 @@ class SubscriptionStatusResponse(BaseModel):
 
 class WebhookEvent(BaseModel):
     """Stripe webhook event payload."""
+
     id: str
     type: str
     data: dict

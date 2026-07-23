@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import inspect
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.api.subscription import create_subscription_router, router
+from app.main import app
 from app.models.subscription import (
     SubscriptionRequest,
     SubscriptionResponse,
-    SubscriptionStatusResponse,
     SubscriptionStatus,
+    SubscriptionStatusResponse,
     SubscriptionTier,
     WebhookEvent,
 )
-from app.main import app
-
 
 # ── Interface Tests (must pass immediately) ──────────────────
 
@@ -89,7 +87,6 @@ class TestSubscriptionModelsInterface:
 
     def test_subscription_request_model(self):
         """SubscriptionRequest has tier and user_id fields."""
-        import inspect
         sig = inspect.signature(SubscriptionRequest)
         field_names = list(sig.parameters.keys())
         assert "tier" in field_names
@@ -97,7 +94,6 @@ class TestSubscriptionModelsInterface:
 
     def test_subscription_response_model(self):
         """SubscriptionResponse has expected fields."""
-        import inspect
         sig = inspect.signature(SubscriptionResponse)
         field_names = list(sig.parameters.keys())
         assert "subscription_id" in field_names
@@ -109,7 +105,6 @@ class TestSubscriptionModelsInterface:
 
     def test_subscription_status_response_model(self):
         """SubscriptionStatusResponse has expected fields."""
-        import inspect
         sig = inspect.signature(SubscriptionStatusResponse)
         field_names = list(sig.parameters.keys())
         assert "user_id" in field_names
@@ -121,7 +116,6 @@ class TestSubscriptionModelsInterface:
 
     def test_webhook_event_model(self):
         """WebhookEvent has id, type, and data fields."""
-        import inspect
         sig = inspect.signature(WebhookEvent)
         field_names = list(sig.parameters.keys())
         assert "id" in field_names
