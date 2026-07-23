@@ -1,6 +1,6 @@
 """Health check endpoint — returns status and version info."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 
@@ -15,5 +15,5 @@ async def health_check() -> dict[str, str]:
     return {
         "status": "ok",
         "version": APP_VERSION,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }

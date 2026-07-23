@@ -1,9 +1,7 @@
 """Tests for SSRF protection service."""
 
-import pytest
 
 from app.services.ssrf import SSRFChecker
-
 
 # ── Interface Tests (must pass immediately) ──────────────────
 
@@ -27,19 +25,19 @@ class TestSSRFCheckerImport:
 
     def test_has_validate_url(self):
         assert hasattr(SSRFChecker, "validate_url")
-        assert callable(getattr(SSRFChecker, "validate_url"))
+        assert callable(SSRFChecker.validate_url)
 
     def test_has_is_private_ip(self):
         assert hasattr(SSRFChecker, "is_private_ip")
-        assert callable(getattr(SSRFChecker, "is_private_ip"))
+        assert callable(SSRFChecker.is_private_ip)
 
     def test_has_sanitize_url(self):
         assert hasattr(SSRFChecker, "sanitize_url")
-        assert callable(getattr(SSRFChecker, "sanitize_url"))
+        assert callable(SSRFChecker.sanitize_url)
 
     def test_has_check_redirect_chain(self):
         assert hasattr(SSRFChecker, "check_redirect_chain")
-        assert callable(getattr(SSRFChecker, "check_redirect_chain"))
+        assert callable(SSRFChecker.check_redirect_chain)
 
     def test_init_signature(self):
         """SSRFChecker.__init__ accepts optional custom_blocked."""

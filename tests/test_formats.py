@@ -1,12 +1,10 @@
 """Tests for formats API endpoints."""
 
 from httpx import ASGITransport, AsyncClient
-import pytest
 
-from app.main import app
-from app.models.content import ContentFormat, FormatInfo
 from app.api.formats import router as formats_router
-
+from app.main import app
+from app.models.content import ContentFormat
 
 # ── Interface Tests (must pass immediately) ──────────────────
 

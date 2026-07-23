@@ -1,10 +1,9 @@
-"""Tests for deployment configuration — Railway patterns, health check, infrastructure."""
+"""Tests for deployment configuration — Railway, health, infrastructure."""
 
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 from httpx import ASGITransport, AsyncClient
-import pytest
 
 from app.main import app
 

@@ -1,10 +1,8 @@
 """Tests for health check endpoint — expanded coverage."""
 
 from httpx import ASGITransport, AsyncClient
-import pytest
 
 from app.main import app, create_app
-
 
 # ── Interface Tests (must pass immediately) ──────────────────
 
@@ -34,8 +32,9 @@ class TestAppFactory:
         assert application.redoc_url == "/redoc"
 
     def test_module_level_app_exists(self):
-        from app.main import app as module_app
         from fastapi import FastAPI
+
+        from app.main import app as module_app
         assert isinstance(module_app, FastAPI)
 
 

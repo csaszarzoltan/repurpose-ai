@@ -1,10 +1,8 @@
 """Tests for brand voice customization service."""
 
-import pytest
 
 from app.models.content import BrandVoice
 from app.services.brand_voice import BrandVoiceConfig
-
 
 # ── Interface Tests (must pass immediately) ──────────────────
 
@@ -24,23 +22,23 @@ class TestBrandVoiceConfigImport:
 
     def test_has_get_prompt_prefix(self):
         assert hasattr(BrandVoiceConfig, "get_prompt_prefix")
-        assert callable(getattr(BrandVoiceConfig, "get_prompt_prefix"))
+        assert callable(BrandVoiceConfig.get_prompt_prefix)
 
     def test_has_get_style_guide(self):
         assert hasattr(BrandVoiceConfig, "get_style_guide")
-        assert callable(getattr(BrandVoiceConfig, "get_style_guide"))
+        assert callable(BrandVoiceConfig.get_style_guide)
 
     def test_has_adapt_text(self):
         assert hasattr(BrandVoiceConfig, "adapt_text")
-        assert callable(getattr(BrandVoiceConfig, "adapt_text"))
+        assert callable(BrandVoiceConfig.adapt_text)
 
     def test_has_validate_tone(self):
         assert hasattr(BrandVoiceConfig, "validate_tone")
-        assert callable(getattr(BrandVoiceConfig, "validate_tone"))
+        assert callable(BrandVoiceConfig.validate_tone)
 
     def test_has_merge_custom(self):
         assert hasattr(BrandVoiceConfig, "merge_custom")
-        assert callable(getattr(BrandVoiceConfig, "merge_custom"))
+        assert callable(BrandVoiceConfig.merge_custom)
 
     def test_init_signature(self):
         """BrandVoiceConfig.__init__ accepts optional voice."""

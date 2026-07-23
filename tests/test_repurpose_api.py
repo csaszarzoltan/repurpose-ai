@@ -1,11 +1,9 @@
 """Tests for repurpose API endpoint."""
 
 from httpx import ASGITransport, AsyncClient
-import pytest
 
-from app.main import app
 from app.api.repurpose import router as repurpose_router
-
+from app.main import app
 
 # ── Interface Tests (must pass immediately) ──────────────────
 

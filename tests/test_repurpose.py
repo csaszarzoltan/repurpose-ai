@@ -10,7 +10,6 @@ from app.models.content import (
 )
 from app.services.repurpose import RepurposeService
 
-
 # ── Interface Tests (must pass immediately) ──────────────────
 
 
@@ -25,23 +24,23 @@ class TestRepurposeServiceImport:
 
     def test_has_repurpose_method(self):
         assert hasattr(RepurposeService, "repurpose")
-        assert callable(getattr(RepurposeService, "repurpose"))
+        assert callable(RepurposeService.repurpose)
 
     def test_has_estimate_tokens(self):
         assert hasattr(RepurposeService, "estimate_tokens")
-        assert callable(getattr(RepurposeService, "estimate_tokens"))
+        assert callable(RepurposeService.estimate_tokens)
 
     def test_has_chunk_content(self):
         assert hasattr(RepurposeService, "chunk_content")
-        assert callable(getattr(RepurposeService, "chunk_content"))
+        assert callable(RepurposeService.chunk_content)
 
     def test_has_get_supported_formats(self):
         assert hasattr(RepurposeService, "get_supported_formats")
-        assert callable(getattr(RepurposeService, "get_supported_formats"))
+        assert callable(RepurposeService.get_supported_formats)
 
     def test_has_analyze_content(self):
         assert hasattr(RepurposeService, "analyze_content")
-        assert callable(getattr(RepurposeService, "analyze_content"))
+        assert callable(RepurposeService.analyze_content)
 
     def test_init_signature(self):
         """RepurposeService.__init__ accepts optional api_key."""
