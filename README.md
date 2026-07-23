@@ -1,53 +1,29 @@
 # RepurposeAI
 
-AI-powered content repurposing tool.
+AI-powered content repurposing tool that transforms one piece of content into 10+ platform-optimized formats.
 
 ## Features
 
-- Transform content across formats (blog → thread, article → script, etc.)
-- AI-powered content analysis and adaptation
-- RESTful API with OpenAPI docs
+- Content repurposing engine (blog → multi-platform)
+- Brand voice customization
+- SSRF protection for safe API calls
+- Multi-platform output formatting
 
-## Setup
+## Tech Stack
+
+- Python 3.11+ / FastAPI
+- Railway deployment
+
+## API Endpoints
+
+- `GET /health` — Health check
+- `POST /api/v1/repurpose` — Repurpose content
+- `GET /api/v1/formats` — List available formats
+- `GET /api/v1/formats/{format_id}` — Format details
+
+## Development
 
 ```bash
-# Install dependencies
 pip install -e ".[dev]"
-
-# Run development server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# Run tests
-pytest -v
-
-# Lint
-ruff check src tests
-ruff format src tests
-
-# Type check
-mypy src
+uvicorn app.main:app --reload
 ```
-
-## API Docs
-
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-## Project Structure
-
-```
-repurposeai/
-├── src/
-│   └── app/
-│       ├── api/           # API route handlers
-│       ├── models/        # Data models
-│       ├── services/      # Business logic
-│       └── utils/         # Shared utilities
-├── tests/
-├── pyproject.toml
-└── README.md
-```
-
-## License
-
-MIT
