@@ -99,6 +99,61 @@ curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/repurpose
   -d '{"content": "Your blog post text here", "target_formats": ["twitter_thread", "linkedin_post"]}'
 ```
 
+### Async Webhook Repurposing
+
+Submit content for async processing and poll for results via callback. Designed for large payloads or when you don't want to block on repurposing.
+
+**`POST /api/v1/webhook/repurpose`** — Enqueue a repurpose job (returns immediately with `202 Accepted`).
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/webhook/repurpose \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": {
+      "title": "AI in Healthcare",
+      "body": "AI is transforming diagnostics.",
+      "source_format": "blog_post",
+      "tags": ["ai"]
+    },
+    "target_formats": ["twitter_thread"],
+    "callback_url": "https://example.com/webhook-receiver",
+    "brand_voice": "professional"
+  }'
+# Response: 202 Accepted
+# {"job_id":"b191d726-...","status_url":"/api/v1/webhook/repurpose/status/b191d726-..."}
+```
+
+Request fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `content` | object | yes | `{title, body, source_format, tags}` |
+| `target_formats` | string[] | yes | At least one format from the [available list](#available-formats) |
+| `callback_url` | string (HTTPS) | yes | Webhook callback destination (only HTTPS allowed) |
+| `brand_voice` | enum | no | Defaults to `professional` |
+| `custom_instructions` | string | no | Free-form instructions for the repurpose engine |
+| `Idempotency-Key` | header | no | UUID/string to prevent duplicate submissions |
+
+> **Callback URL security**: Only `https://` URLs are accepted. Private IPs (127.0.0.1, 192.168.x.x, etc.), `localhost`, `file://`, and metadata endpoints are blocked by SSRF protection.
+
+**`GET /api/v1/webhook/repurpose/status/{job_id}`** — Check job progress.
+
+```bash
+curl https://repurposeai-production-d688.up.railway.app/api/v1/webhook/repurpose/status/b191d726-d45e-4690-a940-68e9270d59b6
+# Response: 200 OK
+# {"job_id":"b191d726-...","status":"pending","created_at":"2026-07-24T12:51:28.885531","completed_at":null,"result":null,"error":null}
+```
+
+Status values: `pending` → `processing` → `completed` / `failed`.
+
+Error responses:
+
+| Status | When |
+|--------|------|
+| `413 Payload Too Large` | Content body exceeds 100 KB |
+| `422 Unprocessable Entity` | Missing required fields, invalid format/voice, or blocked callback URL |
+| `404 Not Found` | Unknown job_id |
+
 ### Available Formats
 
 ```bash
@@ -121,7 +176,7 @@ curl https://repurposeai-production-d688.up.railway.app/api/v1/formats
 ## Testing
 
 ```bash
-# Run all tests (211 tests)
+# Run all tests (299 tests — 287 passing)
 pytest tests/ -v
 
 # Lint check
@@ -137,20 +192,22 @@ repurpose-ai/
 │   │   ├── health.py          # Health check endpoint
 │   │   ├── repurpose.py       # Content repurposing endpoint
 │   │   ├── formats.py         # Format listing endpoint
+│   │   ├── webhook.py         # Async webhook endpoints
 │   │   └── subscription.py    # Stripe billing endpoints
 │   ├── models/
 │   │   ├── content.py         # Content and format models
-│   │   └── subscription.py    # Subscription models
+│   │   ├── subscription.py    # Subscription models
+│   │   └── webhook.py         # Webhook/async job models
 │   ├── services/
 │   │   └── repurpose.py       # Repurposing business logic
 │   ├── constants.py           # App constants (version)
 │   └── main.py                # FastAPI app factory
 ├── tests/
-│   ├── test_deployment.py     # Deployment tests (9)
-│   ├── test_subscription.py   # Billing tests (30)
-│   ├── test_health.py         # Health endpoint tests (15)
-│   ├── test_repurpose.py      # Core repurpose tests (22)
-│   └── ...                    # Other test modules
+│   ├── test_deployment.py         # Deployment tests (9)
+│   ├── test_subscription.py       # Billing tests (30)
+│   ├── test_health.py             # Health endpoint tests (15)
+│   ├── test_repurpose.py          # Core repurpose tests (22)
+│   └── test_webhook_repurpose.py  # Webhook endpoint tests (76 passing, 12 TODO)
 ├── Dockerfile                 # Railway container build
 ├── railway.toml               # Railway deployment config
 ├── pyproject.toml             # Project metadata and dependencies

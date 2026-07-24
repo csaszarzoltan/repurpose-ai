@@ -2,6 +2,36 @@
 
 All notable changes to RepurposeAI will be documented in this file.
 
+## [0.2.0] - 2026-07-24
+
+### Added
+
+- **Async webhook repurposing pipeline**:
+  - `POST /api/v1/webhook/repurpose` — Enqueue content for background repurposing (returns 202 with `job_id`)
+  - `GET /api/v1/webhook/repurpose/status/{job_id}` — Poll job status until completed/failed
+  - `JobRecord`, `JobStatus` (pending → processing → completed / failed) models in `app.models.webhook`
+  - `WebhookRepurposeRequest` model with `ContentItem`, `target_formats`, `callback_url`, `brand_voice`, optional `custom_instructions` and `idempotency_key`
+  - SSRF-safe callback URL validation (HTTPS-only, private IPs/metadata blocked, no dangerous schemes)
+  - Content size enforcement (max 100 KB body, returns 413 Payload Too Large)
+
+- **Documentation**:
+  - `docs/webhook-integration.md` — Full integration guide with Python, n8n, Zapier, and Make examples
+  - README.md updated with webhook endpoint reference, request/response tables, error codes, and project structure
+
+### Changed
+
+- `app.main` now includes webhook router alongside existing routers
+- Test suite expanded to 299 total (287 passing, 12 scaffolded NotImplementedError placeholders)
+- Ruff lint: clean on all changed source
+
+### Technical Decisions
+
+- In-memory `JOBS_DB` dict for job storage (production would use a database)
+- SSRF checker reused from existing `app.services.ssrf` service
+- `callback_url` validated at the endpoint layer (HTTPS-only + SSRF check) rather than in Pydantic, to provide clear 422 error messages
+- Background processing stub left as TODO — enqueue is synchronous, result delivery will be async worker
+- HMAC signature verification and idempotency deduplication scaffolded but not wired (planned for P0-3)
+
 ## [0.1.0] - 2026-07-23
 
 ### Added
