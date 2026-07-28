@@ -21,7 +21,7 @@ class TestAppFactory:
 
     def test_app_has_version(self):
         application = create_app()
-        assert application.version == "0.1.0"
+        assert application.version == "0.5.0"
 
     def test_app_has_docs_url(self):
         application = create_app()

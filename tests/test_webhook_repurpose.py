@@ -201,9 +201,9 @@ class TestJobRecordModel:
     def test_result_is_optional_repurpose_response(self):
         """result field expects RepurposeResponse per job status contract."""
         field = JobRecord.model_fields["result"]
-        from app.models.content import RepurposeResponse as RR
+        from app.models.content import RepurposeResponse
 
-        assert field.annotation == RR | None
+        assert field.annotation == RepurposeResponse | None
 
     def test_result_defaults_none(self):
         record = JobRecord(job_id="test-1")
@@ -759,17 +759,49 @@ class TestWebhookRepurposeInputValidationBehavior:
             )
         assert response.status_code == 413
 
-    @pytest.mark.xfail(reason="Not yet implemented — error messages with format list")
     async def test_invalid_format_error_has_valid_formats_list(self):
         """AC-P1-4: Invalid format error includes list of valid formats."""
-        # This requires parsing the error response detail
-        raise NotImplementedError(
-            "Input validation error messages not yet implemented — test is a placeholder"
-        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/api/v1/webhook/repurpose",
+                json={
+                    "content": {
+                        "title": "Test",
+                        "body": "Valid body",
+                        "source_format": "blog_post",
+                    },
+                    "target_formats": ["nonexistent_format"],
+                    "callback_url": "https://example.com/hook",
+                },
+            )
+        assert response.status_code == 422
+        detail = response.json()["detail"]
+        detail_str = str(detail)
+        # Pydantic enum validation lists valid values in the error message
+        assert "blog_post" in detail_str or "twitter_thread" in detail_str
 
-    @pytest.mark.xfail(reason="Not yet implemented — error messages with voice list")
     async def test_invalid_voice_error_has_valid_voices_list(self):
         """AC-P1-4: Invalid voice error includes list of valid voices."""
-        raise NotImplementedError(
-            "Input validation error messages not yet implemented — test is a placeholder"
-        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/api/v1/webhook/repurpose",
+                json={
+                    "content": {
+                        "title": "Test",
+                        "body": "Valid body",
+                        "source_format": "blog_post",
+                    },
+                    "target_formats": ["twitter_thread"],
+                    "callback_url": "https://example.com/hook",
+                    "brand_voice": "nonexistent_voice",
+                },
+            )
+        assert response.status_code == 422
+        detail = response.json()["detail"]
+        detail_str = str(detail)
+        # Pydantic enum validation lists valid values in the error message
+        assert "professional" in detail_str or "casual" in detail_str

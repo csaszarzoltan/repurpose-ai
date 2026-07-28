@@ -1,8 +1,8 @@
-"""Tests for Stripe subscription and billing endpoints."""
+"""Tests for Stripe subscription and billing endpoints — updated for auth."""
 
 from __future__ import annotations
 
-import inspect
+import uuid
 
 from httpx import ASGITransport, AsyncClient
 
@@ -17,6 +17,51 @@ from app.models.subscription import (
     WebhookEvent,
 )
 
+# ── Helpers ──────────────────────────────────────────────────
+
+
+def _valid_user() -> dict:
+    return {
+        "email": f"sub-test-{uuid.uuid4().hex[:8]}@example.com",
+        "password": "SecurePass123!",
+        "name": "Sub Test User",
+    }
+
+
+async def _register_and_get_token() -> str:
+    """Register a user and return access token."""
+    payload = _valid_user()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        await client.post("/api/v1/auth/register", json=payload)
+        login_resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": payload["email"], "password": payload["password"]},
+        )
+    return login_resp.json()["access_token"]
+
+
+async def _register_and_get_token_for_user(email: str) -> str:
+    """Register a specific user and return access token."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "SecurePass123!",
+                "name": "Specific User",
+            },
+        )
+        login_resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "SecurePass123!"},
+        )
+    return login_resp.json()["access_token"]
+
+
 # ── Interface Tests (must pass immediately) ──────────────────
 
 
@@ -25,6 +70,7 @@ class TestSubscriptionModuleImport:
 
     def test_importable(self):
         from app.api import subscription
+
         assert subscription is not None
 
     def test_create_subscription_router_importable(self):
@@ -40,6 +86,7 @@ class TestSubscriptionRouterInterface:
 
     def test_create_subscription_router_returns_api_router(self):
         from fastapi import APIRouter
+
         result = create_subscription_router()
         assert isinstance(result, APIRouter)
 
@@ -87,6 +134,8 @@ class TestSubscriptionModelsInterface:
 
     def test_subscription_request_model(self):
         """SubscriptionRequest has tier and user_id fields."""
+        import inspect
+
         sig = inspect.signature(SubscriptionRequest)
         field_names = list(sig.parameters.keys())
         assert "tier" in field_names
@@ -94,6 +143,8 @@ class TestSubscriptionModelsInterface:
 
     def test_subscription_response_model(self):
         """SubscriptionResponse has expected fields."""
+        import inspect
+
         sig = inspect.signature(SubscriptionResponse)
         field_names = list(sig.parameters.keys())
         assert "subscription_id" in field_names
@@ -105,6 +156,8 @@ class TestSubscriptionModelsInterface:
 
     def test_subscription_status_response_model(self):
         """SubscriptionStatusResponse has expected fields."""
+        import inspect
+
         sig = inspect.signature(SubscriptionStatusResponse)
         field_names = list(sig.parameters.keys())
         assert "user_id" in field_names
@@ -116,6 +169,8 @@ class TestSubscriptionModelsInterface:
 
     def test_webhook_event_model(self):
         """WebhookEvent has id, type, and data fields."""
+        import inspect
+
         sig = inspect.signature(WebhookEvent)
         field_names = list(sig.parameters.keys())
         assert "id" in field_names
@@ -145,20 +200,21 @@ class TestSubscriptionRouterFunctions:
         assert "/api/v1/webhook" in paths
 
 
-# ── Behavioral Tests (must fail until implementation) ────────
+# ── Behavioral Tests ─────────────────────────────────────────
 
 
 class TestSubscriptionCreateBehavior:
     """Behavioral: POST /api/v1/subscription creates subscriptions."""
 
     async def test_create_free_subscription(self):
-        """No prior subscription -> free tier with 5 repurposes/month."""
+        token = await _register_and_get_token()
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             response = await client.post(
                 "/api/v1/subscription",
-                json={"tier": "free", "user_id": "user-001"},
+                json={"tier": "free"},
+                headers={"Authorization": f"Bearer {token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -167,13 +223,14 @@ class TestSubscriptionCreateBehavior:
         assert data["monthly_limit"] == 5
 
     async def test_create_pro_subscription(self):
-        """Pro tier request -> Pro subscription with unlimited repurposes."""
+        token = await _register_and_get_token()
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             response = await client.post(
                 "/api/v1/subscription",
-                json={"tier": "pro", "user_id": "user-002"},
+                json={"tier": "pro"},
+                headers={"Authorization": f"Bearer {token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -182,48 +239,61 @@ class TestSubscriptionCreateBehavior:
         assert data["monthly_limit"] == -1  # -1 = unlimited
 
     async def test_create_invalid_tier_returns_400(self):
-        """Invalid tier request -> 400 Bad Request."""
+        token = await _register_and_get_token()
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             response = await client.post(
                 "/api/v1/subscription",
-                json={"tier": "enterprise", "user_id": "user-003"},
+                json={"tier": "enterprise"},
+                headers={"Authorization": f"Bearer {token}"},
             )
         assert response.status_code == 400
 
     async def test_create_subscription_response_has_subscription_id(self):
-        """Response includes a subscription_id."""
+        token = await _register_and_get_token()
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             response = await client.post(
                 "/api/v1/subscription",
-                json={"tier": "free", "user_id": "user-004"},
+                json={"tier": "free"},
+                headers={"Authorization": f"Bearer {token}"},
             )
         assert response.status_code == 200
         data = response.json()
         assert "subscription_id" in data
         assert isinstance(data["subscription_id"], str)
 
+    async def test_create_subscription_needs_auth(self):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/api/v1/subscription",
+                json={"tier": "free"},
+            )
+        assert response.status_code == 401
+
 
 class TestSubscriptionStatusBehavior:
     """Behavioral: GET /api/v1/subscription/status returns tier and usage."""
 
     async def test_get_status_returns_tier_and_usage(self):
-        """Returns current tier and usage for the user."""
+        token = await _register_and_get_token()
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             # First create a subscription
             await client.post(
                 "/api/v1/subscription",
-                json={"tier": "free", "user_id": "user-010"},
+                json={"tier": "free"},
+                headers={"Authorization": f"Bearer {token}"},
             )
             # Then get status
             response = await client.get(
                 "/api/v1/subscription/status",
-                params={"user_id": "user-010"},
+                headers={"Authorization": f"Bearer {token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -232,16 +302,63 @@ class TestSubscriptionStatusBehavior:
         assert "repurposes_remaining" in data
         assert data["repurposes_remaining"] == 5
 
-    async def test_get_status_for_nonexistent_user(self):
-        """User with no subscription -> 404."""
+    async def test_get_status_auto_creates_free_tier(self):
+        """User with no explicit subscription gets default free tier."""
+        token = await _register_and_get_token()
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             response = await client.get(
                 "/api/v1/subscription/status",
-                params={"user_id": "nonexistent-user"},
+                headers={"Authorization": f"Bearer {token}"},
             )
-        assert response.status_code == 404
+        assert response.status_code == 200
+        data = response.json()
+        assert data["tier"] == "free"
+        assert data["repurposes_remaining"] == 5
+
+    async def test_get_status_needs_auth(self):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get("/api/v1/subscription/status")
+        assert response.status_code == 401
+
+
+# ── Multi-Tenant Isolation Tests ─────────────────────────────
+
+
+class TestSubscriptionMultiTenantIsolation:
+    """Multi-tenant: users can only see their own subscriptions."""
+
+    async def test_users_have_separate_subscriptions(self):
+        """Two users should have independent subscriptions."""
+        user_a_token = await _register_and_get_token_for_user("alice@example.com")
+        user_b_token = await _register_and_get_token_for_user("bob@example.com")
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            # Alice creates pro subscription
+            await client.post(
+                "/api/v1/subscription",
+                json={"tier": "pro"},
+                headers={"Authorization": f"Bearer {user_a_token}"},
+            )
+
+            # Bob checks his status (should still be free)
+            bob_status = await client.get(
+                "/api/v1/subscription/status",
+                headers={"Authorization": f"Bearer {user_b_token}"},
+            )
+            assert bob_status.json()["tier"] == "free"
+
+            # Alice checks her status (should be pro)
+            alice_status = await client.get(
+                "/api/v1/subscription/status",
+                headers={"Authorization": f"Bearer {user_a_token}"},
+            )
+            assert alice_status.json()["tier"] == "pro"
 
 
 class TestWebhookBehavior:

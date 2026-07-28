@@ -18,6 +18,19 @@ class ContentFormat(StrEnum):
     PODCAST_OUTLINE = "podcast_outline"
     EMAIL_SEQUENCE = "email_sequence"
     SOCIAL_MEDIA = "social_media"
+    # New formats from Phase 2
+    YOUTUBE_TIKTOK_CAPTION = "youtube_tiktok_caption"
+    INSTAGRAM_CAROUSEL = "instagram_carousel"
+    MEDIUM_ARTICLE = "medium_article"
+    REDDIT_POST = "reddit_post"
+    LANDING_PAGE = "landing_page"
+    PRESS_RELEASE = "press_release"
+    CASE_STUDY = "case_study"
+    WHITEPAPER_OUTLINE = "whitepaper_outline"
+    EBOOK_CHAPTER_PLAN = "ebook_chapter_plan"
+    PODCAST_SHOW_NOTES = "podcast_show_notes"
+    LINKEDIN_CAROUSEL = "linkedin_carousel"
+    SAAS_CHANGELOG = "saas_changelog"
 
 
 class BrandVoice(StrEnum):
@@ -46,6 +59,7 @@ class RepurposeRequest(BaseModel):
     target_formats: list[ContentFormat]
     brand_voice: BrandVoice = BrandVoice.PROFESSIONAL
     custom_instructions: str | None = None
+    llm_strategy: str | None = None
 
 
 class RepurposeResponse(BaseModel):
@@ -64,3 +78,7 @@ class FormatInfo(BaseModel):
     max_length: int
     supports_images: bool
     supports_links: bool
+    # Extended fields from Phase 2
+    tone_guidance: str = ""
+    structure_hints: str = ""
+    target_audience: str = ""

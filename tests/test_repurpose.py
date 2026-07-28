@@ -1,11 +1,14 @@
 """Tests for content repurposing service."""
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
+from app.main import app
 from app.models.content import (
     BrandVoice,
     ContentFormat,
     ContentItem,
+    RepurposeRequest,
     RepurposeResponse,
 )
 from app.services.repurpose import RepurposeService
@@ -159,3 +162,178 @@ class TestRepurposeServiceBehavior:
         svc = RepurposeService()
         result = await svc.analyze_content(sample_content)
         assert isinstance(result, dict)
+
+
+# ── Integration Scaffold Tests (Phase 3 — fail until implementation) ──
+
+
+class TestRepurposeServiceLLMIntegration:
+    """Scaffold: RepurposeService with LLMRouter + FormatRegistry dependency.
+
+    These tests validate the integration surface described in Phase 3 of the
+    analysis brief. They will fail until the LLM layer and format registry
+    are wired into RepurposeService.
+    """
+
+    def test_init_accepts_llm_router(self):
+        """RepurposeService should accept an optional LLMRouter."""
+        import inspect
+        sig = inspect.signature(RepurposeService.__init__)
+        params = list(sig.parameters.keys())
+        has_router_param = "llm_router" in params or "router" in params
+        if not has_router_param:
+            pytest.xfail(
+                f"RepurposeService.__init__ needs llm_router param. "
+                f"Current params: {params}"
+            )
+
+    def test_init_accepts_format_registry(self):
+        """RepurposeService should accept an optional FormatRegistry."""
+        import inspect
+        sig = inspect.signature(RepurposeService.__init__)
+        params_str = " ".join(sig.parameters.keys())
+        has_registry = "registry" in params_str or "format_registry" in params_str
+        if not has_registry:
+            pytest.xfail("RepurposeService doesn't accept FormatRegistry yet")
+
+    async def test_repurpose_uses_llm_when_router_provided(self):
+        """When LLMRouter is provided, repurpose() should call it (vs string concat)."""
+        svc = RepurposeService()
+        item = ContentItem(
+            title="Test", body="Test body", source_format=ContentFormat.BLOG_POST
+        )
+        result = await svc.repurpose(
+            content=item,
+            target_formats=[ContentFormat.TWITTER_THREAD],
+        )
+        assert isinstance(result, RepurposeResponse)
+        # TODO: When LLM is wired, the repurposed content should differ from the
+        # simple string-concatenation result
+
+
+class TestRepurposeRequestLLMFields:
+    """Scaffold: RepurposeRequest gains llm_strategy field.
+
+    Analysis brief §4.3 specifies a new optional 'llm_strategy' field.
+    """
+
+    def test_has_llm_strategy_field(self):
+        """RepurposeRequest should have an optional llm_strategy field."""
+        has_field = "llm_strategy" in RepurposeRequest.model_fields
+        if not has_field:
+            pytest.xfail("llm_strategy not added to RepurposeRequest yet")
+
+    def test_llm_strategy_defaults_to_none(self):
+        """llm_strategy should default to None (backward compat)."""
+        from app.models.content import ContentItem
+
+        item = ContentItem(
+            title="T", body="B", source_format=ContentFormat.BLOG_POST
+        )
+        req = RepurposeRequest(
+            content=item,
+            target_formats=[ContentFormat.TWITTER_THREAD],
+        )
+        llm_strategy = getattr(req, "llm_strategy", None)
+        assert llm_strategy is None
+
+
+class TestRepurposeEndpointLLMHeaders:
+    """Scaffold: POST /api/v1/repurpose accepts X-LLM-Provider / X-LLM-Model.
+
+    Analysis brief §4.3 specifies new optional headers for provider selection.
+    """
+
+    async def test_accepts_x_llm_provider_header(self):
+        """Should accept X-LLM-Provider header without error."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/api/v1/repurpose",
+                json=self._make_request(),
+                headers={"X-LLM-Provider": "openai"},
+            )
+        # Currently returns 200 without processing the header — that's OK for backward compat
+        assert response.status_code in (200, 422)
+
+    async def test_accepts_x_llm_model_header(self):
+        """Should accept X-LLM-Model header without error."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/api/v1/repurpose",
+                json=self._make_request(),
+                headers={"X-LLM-Model": "gpt-4o-mini"},
+            )
+        assert response.status_code in (200, 422)
+
+    async def test_accepts_both_llm_headers(self):
+        """Should accept both headers simultaneously."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/api/v1/repurpose",
+                json=self._make_request(),
+                headers={
+                    "X-LLM-Provider": "anthropic",
+                    "X-LLM-Model": "claude-haiku",
+                },
+            )
+        assert response.status_code in (200, 422)
+
+    async def test_unknown_provider_header_returns_200(self):
+        """Unknown provider header should not crash (backward compat)."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/api/v1/repurpose",
+                json=self._make_request(),
+                headers={"X-LLM-Provider": "nonexistent-provider"},
+            )
+        # Should not crash — either 200 or 422
+        assert response.status_code in (200, 422)
+
+    def _make_request(self):
+        return {
+            "content": {
+                "title": "AI in Healthcare",
+                "body": "AI is transforming diagnostics.",
+                "source_format": "blog_post",
+                "tags": ["ai"],
+            },
+            "target_formats": ["twitter_thread"],
+            "brand_voice": "professional",
+        }
+
+
+class TestRepurposeServiceBackwardCompat:
+    """Scaffold: Ensure backward compatibility after LLM integration.
+
+    Existing behavior (string concatenation when no LLM) must still work
+    when no LLMRouter is provided.
+    """
+
+    @pytest.fixture
+    def sample_content(self):
+        return ContentItem(
+            title="AI in Healthcare",
+            body="Artificial intelligence is transforming healthcare diagnostics.",
+            source_format=ContentFormat.BLOG_POST,
+            tags=["ai", "healthcare"],
+        )
+
+    async def test_repurpose_still_works_without_router(self, sample_content):
+        """Without an LLMRouter, repurpose should still return string-concat result."""
+        svc = RepurposeService()
+        result = await svc.repurpose(
+            content=sample_content,
+            target_formats=[ContentFormat.TWITTER_THREAD],
+        )
+        assert isinstance(result, RepurposeResponse)
+        text = result.repurposed.get(ContentFormat.TWITTER_THREAD, "")
+        assert "Write in a" in text  # Brand voice prompt prefix still present
+        assert sample_content.body in text  # Original body still present

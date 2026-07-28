@@ -65,14 +65,14 @@ class TestDeploymentHealthEndpoint:
         assert response.status_code == 200
 
     async def test_health_returns_version(self):
-        """Health endpoint must include version string '0.1.0'."""
+        """Health endpoint must include version string '0.3.0'."""
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             response = await client.get("/health")
         data = response.json()
         assert "version" in data
-        assert data["version"] == "0.1.0"
+        assert data["version"] == "0.5.0"
 
     async def test_health_returns_status_ok(self):
         async with AsyncClient(

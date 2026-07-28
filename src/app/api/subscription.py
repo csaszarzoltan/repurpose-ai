@@ -5,8 +5,10 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.dependencies import get_current_user
+from app.models.auth import UserResponse
 from app.models.subscription import (
     SubscriptionResponse,
     SubscriptionStatus,
@@ -44,18 +46,18 @@ def _resolve_tier(tier_str: str) -> SubscriptionTier:
 
 
 @router.post("/subscription", response_model=SubscriptionResponse)
-async def create_subscription(request: Request) -> SubscriptionResponse:
-    """Create or update a subscription for a user."""
+async def create_subscription(
+    request: Request,
+    current_user: UserResponse = Depends(get_current_user),
+) -> SubscriptionResponse:
+    """Create or update a subscription for the authenticated user."""
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body") from None
 
     tier_str = body.get("tier", "")
-    user_id = body.get("user_id", "")
-
-    if not user_id:
-        raise HTTPException(status_code=400, detail="user_id is required")
+    user_id = current_user.user_id
 
     tier = _resolve_tier(tier_str)
     subscription_id = f"sub_{uuid.uuid4().hex[:12]}"
@@ -76,13 +78,24 @@ async def create_subscription(request: Request) -> SubscriptionResponse:
 
 
 @router.get("/subscription/status", response_model=SubscriptionStatusResponse)
-async def get_subscription_status(request: Request) -> SubscriptionStatusResponse:
-    """Get the current subscription status for a user."""
-    user_id = request.query_params.get("user_id", "")
-    if not user_id or user_id not in _subscriptions:
-        raise HTTPException(status_code=404, detail="Subscription not found")
+async def get_subscription_status(
+    current_user: UserResponse = Depends(get_current_user),
+) -> SubscriptionStatusResponse:
+    """Get the current subscription status for the authenticated user."""
+    user_id = current_user.user_id
+    sub = _subscriptions.get(user_id)
+    if not sub:
+        # Default to free tier if no subscription exists
+        sub = {
+            "subscription_id": f"sub_{uuid.uuid4().hex[:12]}",
+            "user_id": user_id,
+            "tier": SubscriptionTier.FREE,
+            "status": SubscriptionStatus.ACTIVE,
+            "monthly_limit": TIER_LIMITS[SubscriptionTier.FREE],
+            "current_usage": 0,
+        }
+        _subscriptions[user_id] = sub
 
-    sub = _subscriptions[user_id]
     monthly_limit = sub["monthly_limit"]
     usage = sub["current_usage"]
     repurposes_remaining = -1 if monthly_limit == -1 else monthly_limit - usage
