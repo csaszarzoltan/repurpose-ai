@@ -2,6 +2,45 @@
 
 All notable changes to RepurposeAI will be documented in this file.
 
+## [0.6.0] - 2026-07-29
+
+### Added
+
+- **Multi-Platform Auto-Publish**:
+  - Post content to LinkedIn via OAuth2 (`POST /rest/posts`)
+  - Post to Twitter/X via OAuth2 (`POST /2/tweets`, thread support)
+  - Post to Medium via Personal Access Token (`POST /v1/users/{id}/posts`, markdown)
+  - `PublishService` orchestrator dispatching to the correct platform publisher
+  - Dry-run mode for safe testing without actually posting
+  - Job tracking with `GET /api/v1/publish/{job_id}` status endpoint
+
+- **PlatformAuthService**:
+  - OAuth2 authorization flow (get auth URL, exchange code)
+  - Credential storage and management (CRUD via API)
+  - Token refresh on 401 for LinkedIn and Twitter
+  - Supports LinkedIn, Twitter/X (OAuth2 PKCE), Medium (PAT)
+
+- **Rate Limiting**:
+  - `RateLimiter` service enforcing per-platform rate limits
+  - Configurable max requests per time window
+  - Automatic back-pressure under high load
+
+- **Publish API Endpoints**:
+  - `POST /api/v1/publish` — dispatch content to a platform
+  - `GET /api/v1/publish/platforms` — list supported platforms
+  - `GET /publish/{platform}/auth-url` — start OAuth2 flow
+  - `POST /publish/{platform}/callback` — complete OAuth2 flow
+  - `GET/PUT/DELETE /publish/{platform}/credentials` — manage credentials
+
+### Tests
+
+- ~390 new tests (total ~1,215)
+- Full test coverage: LinkedIn publisher, Twitter publisher, Medium publisher
+- Platform auth service tests (OAuth2 flow, credential management, token refresh)
+- Rate limiter tests (concurrency, window tracking, back-pressure)
+- Publish API integration tests (request dispatch, job status, error handling)
+- Publish model validation tests
+
 ## [0.5.0] - 2026-07-27
 
 ### Added

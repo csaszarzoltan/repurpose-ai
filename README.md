@@ -275,6 +275,213 @@ curl https://repurposeai-production-d688.up.railway.app/api/v1/webhook/repurpose
 
 Status values: `pending` → `processing` → `completed` / `failed`.
 
+## Workflow Automation
+
+Schedule, batch, and webhook-trigger content repurposing via configurable step pipelines.
+
+Three trigger types:
+
+- **Manual** — Trigger on demand via API
+- **Schedule** — Cron expression or interval-based scheduling
+- **Webhook** — Incoming webhook with HMAC-SHA256 signature verification
+
+### POST /api/v1/workflows — Create Workflow
+
+Create a new workflow definition with sequential steps.
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Workflow name |
+| `description` | string | No | Optional description |
+| `trigger_type` | string | No | `manual` (default), `schedule`, or `webhook` |
+| `steps` | array | Yes | Non-empty list of step objects (see below) |
+| `schedule` | object | No | Schedule configuration for trigger_type=`schedule` |
+| `webhook_config` | object | No | Webhook config for trigger_type=`webhook` |
+| `is_active` | bool | No | Default `true` |
+
+**Step object:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `step_id` | string | Yes | Unique step identifier within the workflow |
+| `step_type` | string | Yes | `repurpose`, `webhook`, or `wait` |
+| `config` | object | No | Step-specific configuration |
+| `retry_config` | object | No | Optional retry policy |
+
+**Step types:**
+
+| Step Type | Description | Config keys |
+|-----------|-------------|-------------|
+| `repurpose` | Run content repurposing | `source_content`, `target_formats`, `brand_voice`, `custom_instructions` |
+| `webhook` | Call an external URL | `callback_url`, `method` (POST/GET/PUT), `payload`, `headers` |
+| `wait` | Pause for a delay | `delay_seconds` |
+
+**Retry config:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_attempts` | int | 3 | Max retry attempts on failure |
+| `delay_seconds` | int | 30 | Seconds between retries |
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/workflows \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Blog → Social + Newsletter",
+    "description": "Repurpose a blog post into social media and email",
+    "trigger_type": "manual",
+    "steps": [
+      {
+        "step_id": "twitter",
+        "step_type": "repurpose",
+        "config": {
+          "target_formats": ["twitter_thread", "linkedin_post"],
+          "brand_voice": "professional"
+        }
+      },
+      {
+        "step_id": "wait_1",
+        "step_type": "wait",
+        "config": {"delay_seconds": 10}
+      },
+      {
+        "step_id": "newsletter",
+        "step_type": "repurpose",
+        "config": {
+          "target_formats": ["newsletter"],
+          "brand_voice": "professional"
+        }
+      }
+    ]
+  }'
+# Response: 201 Created
+# {"workflow_id": "a1b2c3d4-..."}
+```
+
+### GET /api/v1/workflows — List Workflows
+
+List all workflow definitions with optional active filter.
+
+```bash
+# List all workflows
+curl https://repurposeai-production-d688.up.railway.app/api/v1/workflows
+
+# Filter by active status
+curl "https://repurposeai-production-d688.up.railway.app/api/v1/workflows?active=true"
+```
+
+Response: Array of workflow definition objects.
+
+### POST /api/v1/workflows/{id}/trigger — Manual Trigger
+
+Trigger a workflow execution manually. The workflow must exist and be active.
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/workflows/a1b2c3d4-.../trigger
+# Response: 202 Accepted
+# {"execution_id": "e5f6g7h8-..."}
+```
+
+### POST /api/v1/webhook/workflow/{workflow_id} — Webhook Trigger
+
+Trigger a workflow via incoming webhook. If the workflow's `webhook_config` has a `secret`, HMAC-SHA256 verification is performed via the `X-Hub-Signature-256` header.
+
+```bash
+# Without HMAC (no secret configured)
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/webhook/workflow/a1b2c3d4-... \
+  -H "Content-Type: application/json"
+# Response: 202 Accepted
+# {"execution_id": "e5f6g7h8-..."}
+
+# With HMAC signing
+echo -n '{"payload":"data"}' | openssl dgst -sha256 -hmac "your-secret"
+# Produces: sha256=abc123...
+
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/webhook/workflow/a1b2c3d4-... \
+  -H "Content-Type: application/json" \
+  -H "X-Hub-Signature-256: sha256=abc123..." \
+  -d '{"payload": "data"}'
+```
+
+### POST /api/v1/repurpose/batch — Batch Repurposing
+
+Repurpose multiple content items in a single request. Processes jobs concurrently with a configurable concurrency limit.
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `jobs` | array | Yes | List of job objects (1–50 items) |
+| `concurrency` | int | No | Max parallel jobs (default 5, min 1) |
+
+**Job object:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `content` | object | Yes | Content with `title`, `body`, `source_format` |
+| `target_formats` | array | Yes | List of format IDs |
+| `brand_voice` | string | No | `professional` (default), `casual`, `humorous`, `formal` |
+| `custom_instructions` | string | No | Optional per-job custom instructions |
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/repurpose/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jobs": [
+      {
+        "content": {"title": "AI in Healthcare", "body": "AI is transforming diagnostics.", "source_format": "blog_post"},
+        "target_formats": ["twitter_thread"],
+        "brand_voice": "professional"
+      },
+      {
+        "content": {"title": "Quantum Computing", "body": "Quantum computing advances in 2026.", "source_format": "blog_post"},
+        "target_formats": ["linkedin_post", "newsletter"],
+        "brand_voice": "casual"
+      },
+      {
+        "content": {"title": "DevOps Best Practices", "body": "CI/CD pipelines in 2026.", "source_format": "blog_post"},
+        "target_formats": ["linkedin_carousel"],
+        "brand_voice": "formal"
+      }
+    ],
+    "concurrency": 3
+  }'
+# Response:
+# {"batch_id":"b1c2d3e4-...","total":3,"completed":3,"failed":0,"results":[...],"errors":[]}
+```
+
+### GET /api/v1/jobs/{id} — Unified Job Status
+
+Check the status of any job — both async webhook repurpose jobs and workflow executions — via a single endpoint.
+
+```bash
+curl https://repurposeai-production-d688.up.railway.app/api/v1/jobs/b191d726-...
+# Response:
+# {"job_id":"b191d726-...","status":"completed","created_at":"...","completed_at":"...","result":{...}}
+```
+
+### Scheduling Configuration
+
+Environment variables for the background workflow scheduler:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WORKFLOW_SCHEDULER_INTERVAL` | `60` | Scheduler poll interval in seconds |
+| `WORKFLOW_MAX_CONCURRENCY` | `5` | Max concurrent workflow executions |
+
+### API Endpoint Table — Workflow Automation
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| /api/v1/workflows | POST | Optional | Create workflow definition |
+| /api/v1/workflows | GET | Optional | List workflows |
+| /api/v1/workflows/{id}/trigger | POST | Optional | Trigger workflow manually |
+| /api/v1/webhook/workflow/{workflow_id} | POST | None (HMAC) | Trigger via webhook |
+| /api/v1/repurpose/batch | POST | Optional | Batch repurpose |
+| /api/v1/jobs/{id} | GET | None | Unified job status |
+
 ## All 20 Content Formats
 
 Each format has tailored tone guidance, structure hints, and target audience for LLM generation.
@@ -328,7 +535,7 @@ Rate limiting is planned but not yet implemented. Production deployments should 
 ## Testing
 
 ```bash
-# Run all tests (598 passing, 10 pre-existing xfailed)
+# Run all tests (805 passing, 10 pre-existing xfailed)
 .venv/bin/python -m pytest tests/ -v
 
 # Run a specific test file
@@ -337,6 +544,8 @@ Rate limiting is planned but not yet implemented. Production deployments should 
 # Lint check
 .venv/bin/ruff check src/ tests/
 ```
+
+Tests: 805 total (598 → 805, +207 new for workflow automation). 2 skipped, 10 xfailed (planned feature markers).
 
 ## Project Structure
 
@@ -349,13 +558,17 @@ repurpose-ai/
 │   │   ├── health.py          # Health check endpoint
 │   │   ├── repurpose.py       # Content repurposing endpoint (LLM-aware)
 │   │   ├── formats.py         # Format listing endpoint
-│   │   ├── webhook.py         # Async webhook endpoints
-│   │   └── subscription.py    # Stripe billing endpoints
+│   │   ├── webhook.py         # Async webhook + workflow trigger endpoints
+│   │   ├── subscription.py    # Stripe billing endpoints
+│   │   ├── workflows.py       # NEW: Workflow CRUD + manual trigger
+│   │   ├── batch.py           # NEW: Batch repurpose endpoint
+│   │   └── jobs.py            # NEW: Unified job status endpoint
 │   ├── models/
 │   │   ├── auth.py            # User, Token, API Key, BrandVoice models
 │   │   ├── content.py         # Content + 20 ContentFormat enum + FormatInfo
 │   │   ├── subscription.py    # Subscription models
-│   │   └── webhook.py         # Webhook/async job models
+│   │   ├── webhook.py         # Webhook/async job models
+│   │   └── workflow.py        # NEW: Workflow models + enums
 │   ├── services/
 │   │   ├── llm/               # Multi-Provider LLM Layer
 │   │   │   ├── base.py        # BaseLLMProvider abstract interface
@@ -370,7 +583,10 @@ repurpose-ai/
 │   │   ├── api_key.py         # API key generation, hashing, validation
 │   │   ├── repurpose.py       # Repurposing business logic (LLM-aware)
 │   │   ├── brand_voice.py     # Brand voice customization
-│   │   └── ssrf.py            # SSRF protection
+│   │   ├── ssrf.py            # SSRF protection
+│   │   ├── workflow_engine.py # NEW: Workflow execution engine
+│   │   ├── scheduler.py      # NEW: asyncio scheduler
+│   │   └── workflow_store.py  # NEW: In-memory workflow store
 │   ├── dependencies.py        # Auth dependencies (get_current_user, etc.)
 │   ├── constants.py           # App constants (version)
 │   └── main.py                # FastAPI app factory

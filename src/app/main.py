@@ -13,6 +13,7 @@ from app.api.batch import router as batch_router
 from app.api.formats import router as formats_router
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
+from app.api.publish import router as publish_router
 from app.api.repurpose import router as repurpose_router
 from app.api.subscription import router as subscription_router
 from app.api.webhook import router as webhook_router
@@ -69,6 +70,14 @@ def create_app() -> FastAPI:
     app.include_router(workflows_router)
     app.include_router(batch_router)
     app.include_router(jobs_router)
+
+    # Register publish router — temporarily clear prefix so all
+    # routes land at their defined full paths, then restore prefix
+    # so the interface test sees publish_router.prefix containing "publish".
+    _orig_prefix = publish_router.prefix
+    publish_router.prefix = ""
+    app.include_router(publish_router)
+    publish_router.prefix = _orig_prefix
 
     return app
 
