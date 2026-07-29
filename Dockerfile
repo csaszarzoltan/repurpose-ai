@@ -13,8 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy dependency files first for layer caching
 COPY pyproject.toml ./
 
-# Install Python dependencies with uv
-RUN uv pip install --system --no-cache -e ".[dev]" || uv pip install --system --no-cache fastapi uvicorn pydantic httpx
+# Install Python dependencies with uv (list all deps from pyproject.toml so the
+# fallback still works when editable install fails in Docker build context)
+RUN uv pip install --system --no-cache -e ".[dev]" 2>/dev/null || \
+    uv pip install --system --no-cache \
+        fastapi uvicorn\[standard\] pydantic httpx \
+        PyJWT python-multipart openai anthropic tiktoken
 
 # Copy application code (src/app → /app/app so `app.main:app` resolves)
 COPY src/app/ app/
