@@ -72,7 +72,7 @@ class TestDeploymentHealthEndpoint:
             response = await client.get("/health")
         data = response.json()
         assert "version" in data
-        assert data["version"] == "0.6.0"
+        assert data["version"] == "0.7.0"
 
     async def test_health_returns_status_ok(self):
         async with AsyncClient(
