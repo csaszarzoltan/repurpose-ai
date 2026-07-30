@@ -23,6 +23,11 @@ AI-powered content repurposing tool that transforms one piece of content into 20
 - SSRF protection for safe API calls
 - Stripe billing integration with Free and Pro tiers
 - Railway cloud deployment
+- **Multi-Platform Auto-Publish** — Post to LinkedIn, Twitter/X, and Medium via API
+- **OAuth2 platform auth** — LinkedIn OAuth2, Twitter/X OAuth2 PKCE, Medium PAT
+- **Per-platform rate limiting** — configurable token-bucket with automatic back-pressure
+- **Dry-run mode** — validate publish requests without posting
+- **Publish job tracking** — query publish status by job ID
 
 ## Tech Stack
 
@@ -123,7 +128,7 @@ curl -X POST ... \
 
 ```bash
 curl https://repurposeai-production-d688.up.railway.app/health
-# {"status":"ok","version":"0.4.0","timestamp":"..."}
+# {"status":"ok","version":"0.6.0","timestamp":"..."}
 ```
 
 ### Authentication (JWT)
@@ -482,6 +487,102 @@ Environment variables for the background workflow scheduler:
 | /api/v1/repurpose/batch | POST | Optional | Batch repurpose |
 | /api/v1/jobs/{id} | GET | None | Unified job status |
 
+## Multi-Platform Auto-Publish
+
+Publish content directly to social platforms via a unified API. Supported platforms:
+
+| Platform | Auth Method | Post Types |
+|----------|-------------|------------|
+| **LinkedIn** | OAuth2 (`w_member_social`) | Text commentary, article links, image posts |
+| **Twitter / X** | OAuth2 PKCE (`tweet.write`, `users.read`, `offline.access`) | Single tweet, threaded tweets with media |
+| **Medium** | Personal Access Token | Draft or published articles (markdown) |
+
+### Dry-Run Mode
+
+Pass `dry_run=true` to validate a publish request without actually posting:
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/publish?dry_run=true \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "linkedin", "content": "Hello world!", "title": "Test"}'
+# {"job_id":"...","platform":"linkedin","status":"dry-run","errors":[],"created_at":"..."}
+```
+
+In dry-run mode the request is validated, a job ID is returned with status `dry-run`, and no HTTP calls are made to the platform.
+
+### Publish API Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| /api/v1/publish | POST | Platform credentials | Dispatch content to a platform |
+| /api/v1/publish?dry_run=true | POST | Platform credentials | Validate without posting |
+| /api/v1/publish/{job_id} | GET | None | Query publish job status |
+| /api/v1/publish/platforms | GET | None | List supported platforms |
+| /publish/{platform}/auth-url | GET | None | Get OAuth2 authorization URL |
+| /publish/{platform}/callback | POST | Auth code | Complete OAuth2 token exchange |
+| /publish/{platform}/credentials | GET | None | List stored credentials |
+| /publish/{platform}/credentials | PUT | None | Store or update credentials |
+
+### Platform Setup
+
+#### LinkedIn
+
+1. Create an app at [LinkedIn Developer Portal](https://www.linkedin.com/developers/apps)
+2. Request the **`w_member_social`** scope under Products → "Share on LinkedIn"
+3. Note your **Client ID** and **Client Secret** from the Auth tab
+4. Set the OAuth2 redirect URI to your callback handler
+5. Get the auth URL:
+
+```bash
+curl "https://repurposeai-production-d688.up.railway.app/publish/linkedin/auth-url?redirect_uri=https://yourapp.com/callback"
+# {"url":"https://www.linkedin.com/oauth/v2/authorization?...","auth_url":"...","platform":"linkedin"}
+```
+
+6. User authorizes → receives a `code` → exchange it:
+
+```bash
+curl -X POST "https://repurposeai-production-d688.up.railway.app/publish/linkedin/callback?code=AUTH_CODE&state=..."
+# {"status":"success","platform":"linkedin","access_token":"AQV..."}
+```
+
+#### Twitter / X
+
+1. Create a project at [Twitter Developer Portal](https://developer.twitter.com/en/portal/dashboard)
+2. Enable **OAuth 2.0 PKCE** with **Confidential Client** type
+3. Add scopes: `tweet.write`, `users.read`, `offline.access`
+4. Note your **Client ID** (PKCE code challenge/challenge method managed by the app)
+5. Get the auth URL:
+
+```bash
+curl "https://repurposeai-production-d688.up.railway.app/publish/twitter/auth-url?redirect_uri=https://yourapp.com/callback"
+```
+
+6. Exchange the authorization code for credentials via the callback endpoint.
+
+#### Medium
+
+1. Go to **Settings → Security and apps → Integration tokens** on [Medium](https://medium.com/me/settings)
+2. Generate a **Personal Access Token**
+3. Store it via the credentials API:
+
+```bash
+curl -X PUT "https://repurposeai-production-d688.up.railway.app/publish/medium/credentials" \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "medium", "access_token": "YOUR_PAT", "is_active": true}'
+```
+
+### Rate Limiting
+
+> **Important**: Platform credentials are stored in-memory and are lost on service restart. For production use, configure a persistent credential store.
+
+The `RateLimiter` service enforces per-platform rate limits using a token-bucket algorithm:
+
+| Platform | Default Limit | Window |
+|----------|--------------|--------|
+| All platforms | 100 requests | 60 seconds |
+
+Rate limits are configurable via the `max_calls` and `period` parameters on the `RateLimiter` class. When a publisher receives HTTP 429 responses, it applies exponential backoff (0.5s → 1s → 2s) and retries automatically.
+
 ## All 20 Content Formats
 
 Each format has tailored tone guidance, structure hints, and target audience for LLM generation.
@@ -530,22 +631,27 @@ curl https://repurposeai-production-d688.up.railway.app/api/v1/formats
 
 ## Rate Limiting
 
-Rate limiting is planned but not yet implemented. Production deployments should add rate limiting at the reverse proxy level (e.g., nginx, Cloudflare, or Railway edge middleware). The LLM layer already handles provider-level rate limits gracefully via the auto-fallback mechanism — if one provider hits rate limits, the router automatically tries the next available provider.
+Per-platform rate limiting is implemented via the `RateLimiter` service using a token-bucket algorithm (see [Multi-Platform Auto-Publish](#multi-platform-auto-publish) for defaults). Each platform has an isolated rate-limit bucket. When a publisher receives HTTP 429 responses, exponential backoff (0.5s → 1s → 2s) is applied with automatic retries.
+
+Additionally, the LLM layer handles provider-level rate limits gracefully via the auto-fallback mechanism — if one LLM provider hits rate limits, the router automatically tries the next available provider.
 
 ## Testing
 
 ```bash
-# Run all tests (805 passing, 10 pre-existing xfailed)
+# Run all tests (960 passing, 10 pre-existing xfailed)
 .venv/bin/python -m pytest tests/ -v
 
 # Run a specific test file
 .venv/bin/python -m pytest tests/test_repurpose.py -v
 
+# Run publish-specific tests
+.venv/bin/python -m pytest tests/test_publish.py tests/test_publish_api.py -v
+
 # Lint check
 .venv/bin/ruff check src/ tests/
 ```
 
-Tests: 805 total (598 → 805, +207 new for workflow automation). 2 skipped, 10 xfailed (planned feature markers).
+Tests: 973 total (+168 new for publish/rate-limiting). 1 known failure (test_auth_failure_refreshes_token_and_retries — respx route dedup), 2 skipped, 10 xfailed (planned feature markers).
 
 ## Project Structure
 
@@ -560,15 +666,17 @@ repurpose-ai/
 │   │   ├── formats.py         # Format listing endpoint
 │   │   ├── webhook.py         # Async webhook + workflow trigger endpoints
 │   │   ├── subscription.py    # Stripe billing endpoints
-│   │   ├── workflows.py       # NEW: Workflow CRUD + manual trigger
-│   │   ├── batch.py           # NEW: Batch repurpose endpoint
-│   │   └── jobs.py            # NEW: Unified job status endpoint
+│   │   ├── workflows.py       # Workflow CRUD + manual trigger
+│   │   ├── batch.py           # Batch repurpose endpoint
+│   │   ├── jobs.py            # Unified job status endpoint
+│   │   └── publish.py         # NEW: Multi-platform publish + OAuth2 endpoints
 │   ├── models/
 │   │   ├── auth.py            # User, Token, API Key, BrandVoice models
 │   │   ├── content.py         # Content + 20 ContentFormat enum + FormatInfo
 │   │   ├── subscription.py    # Subscription models
 │   │   ├── webhook.py         # Webhook/async job models
-│   │   └── workflow.py        # NEW: Workflow models + enums
+│   │   ├── workflow.py        # Workflow models + enums
+│   │   └── publish.py         # NEW: Publish models + PlatformCredentials
 │   ├── services/
 │   │   ├── llm/               # Multi-Provider LLM Layer
 │   │   │   ├── base.py        # BaseLLMProvider abstract interface
@@ -579,11 +687,18 @@ repurpose-ai/
 │   │   ├── formats/
 │   │   │   ├── registry.py    # FormatTemplate + FormatRegistry
 │   │   │   └── templates.py   # All 20 format prompt templates
+│   │   ├── publishers/        # NEW: Platform publisher implementations
+│   │   │   ├── linkedin.py    # LinkedIn Posts API
+│   │   │   ├── twitter.py     # Twitter/X API v2
+│   │   │   └── medium.py      # Medium API v1
 │   │   ├── auth.py            # JWT, password hashing, user management
 │   │   ├── api_key.py         # API key generation, hashing, validation
 │   │   ├── repurpose.py       # Repurposing business logic (LLM-aware)
 │   │   ├── brand_voice.py     # Brand voice customization
 │   │   ├── ssrf.py            # SSRF protection
+│   │   ├── publish.py         # NEW: PublishService orchestrator
+│   │   ├── platform_auth.py   # NEW: OAuth2 auth service
+│   │   ├── rate_limiter.py    # NEW: Token-bucket rate limiter
 │   │   ├── workflow_engine.py # NEW: Workflow execution engine
 │   │   ├── scheduler.py      # NEW: asyncio scheduler
 │   │   └── workflow_store.py  # NEW: In-memory workflow store
