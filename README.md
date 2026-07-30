@@ -28,6 +28,11 @@ AI-powered content repurposing tool that transforms one piece of content into 20
 - **Per-platform rate limiting** — configurable token-bucket with automatic back-pressure
 - **Dry-run mode** — validate publish requests without posting
 - **Publish job tracking** — query publish status by job ID
+- **Analytics Dashboard** — content performance tracking, optimization scoring, and trend visualization
+- **Validation Gap Analyzer** — readability analysis (Flesch-Kincaid, Dale-Chall, ARI), diff blocks, tone consistency, faithfulness scoring, and LLM-based quality judging
+- **Platform Optimization Scoring** — deterministic 0–100 algorithm-readiness score per platform
+- **CSV & PDF Export** — scheduled analytics exports with in-memory schedule management
+- **Trend Visualization** — period-over-period delta computation, top content ranking, per-metric time-series trends
 
 ## Tech Stack
 
@@ -128,7 +133,7 @@ curl -X POST ... \
 
 ```bash
 curl https://repurposeai-production-d688.up.railway.app/health
-# {"status":"ok","version":"0.6.0","timestamp":"..."}
+# {"status":"ok","version":"0.7.0","timestamp":"..."}
 ```
 
 ### Authentication (JWT)
@@ -583,6 +588,69 @@ The `RateLimiter` service enforces per-platform rate limits using a token-bucket
 
 Rate limits are configurable via the `max_calls` and `period` parameters on the `RateLimiter` class. When a publisher receives HTTP 429 responses, it applies exponential backoff (0.5s → 1s → 2s) and retries automatically.
 
+## Analytics Dashboard
+
+Track content performance, compute optimization scores, validate AI-generated content, export reports, and visualize trends. All endpoints are under `/api/v1/analytics`.
+
+### Analytics API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/analytics/posts` | GET | List all tracked posts with metrics |
+| `/api/v1/analytics/posts/{post_id}` | GET | Get detailed metrics for a specific post |
+| `/api/v1/analytics/summary` | GET | Aggregate summary over a date range |
+| `/api/v1/analytics/optimization-score/calculate` | POST | Calculate 0–100 algorithm-readiness score |
+| `/api/v1/analytics/optimization-score/{post_id}` | GET | Get stored optimization score for a post |
+| `/api/v1/analytics/validate` | POST | Validate AI-generated content vs published |
+| `/api/v1/analytics/validation/{job_id}` | GET | Get validation report by job ID |
+| `/api/v1/analytics/export/csv` | POST | Export analytics data as CSV |
+| `/api/v1/analytics/export/pdf` | POST | Export analytics report as PDF |
+| `/api/v1/analytics/export/schedule` | POST | Create a scheduled export |
+| `/api/v1/analytics/export/schedule/{schedule_id}` | DELETE | Delete an export schedule |
+| `/api/v1/analytics/export/{export_id}` | GET | Get export status by ID |
+| `/api/v1/analytics/trends/{metric}` | GET | Time-series trend data for a metric |
+| `/api/v1/analytics/trends/summary` | GET | Summary of all trend metrics |
+| `/api/v1/analytics/trends/top-content` | GET | Top-performing content across all platforms |
+
+### Analytics Modules
+
+The dashboard is organized into 7 internal modules (see `docs/analytics.md` for full guide):
+
+| Module | Priority | Service | Description |
+|--------|----------|---------|-------------|
+| P0.1 | Data Store | `DatabaseConnection`, `MetricsRepository`, `ValidationRepository`, `ScoreRepository`, `Migrator` | Connection lifecycle, versioned schema migrations, in-memory CRUD |
+| P0.2 | Content Performance | `MetricsCollector` | Fetch and normalise per-post metrics (engagement, completion, share, growth rates) |
+| P1.1 | Optimization Scoring | `ScoreCalculator` | Deterministic 0–100 scoring per platform with weighted signal contributions |
+| P1.2 | Validation Gap Analyzer | `ValidationAnalyzer` | Readability (Flesch-Kincaid, Dale-Chall, ARI), diff blocks (difflib), tone consistency, faithfulness, LLM quality judge |
+| P1.3 | CSV Export | `ExportService` | CSV generation with headers, schedule management (create/delete/list) |
+| P2.1 | PDF Export | `ExportService` | PDF file path stubs, schedule management, export status tracking |
+| P2.2 | Trend Visualization | `TrendService` | Period-over-period delta, top content ranking, per-metric time-series |
+
+### Analytics Quick-Start
+
+```bash
+# List tracked posts
+curl https://repurposeai-production-d688.up.railway.app/api/v1/analytics/posts
+
+# Get aggregate summary
+curl https://repurposeai-production-d688.up.railway.app/api/v1/analytics/summary
+
+# Calculate optimization score
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/analytics/optimization-score/calculate
+
+# Validate content
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/analytics/validate
+
+# Export as CSV
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/analytics/export/csv
+
+# Get trend data for engagement_rate
+curl https://repurposeai-production-d688.up.railway.app/api/v1/analytics/trends/engagement_rate
+
+# Get top-performing content
+curl https://repurposeai-production-d688.up.railway.app/api/v1/analytics/trends/top-content
+```
+
 ## All 20 Content Formats
 
 Each format has tailored tone guidance, structure hints, and target audience for LLM generation.
@@ -638,7 +706,7 @@ Additionally, the LLM layer handles provider-level rate limits gracefully via th
 ## Testing
 
 ```bash
-# Run all tests (960 passing, 10 pre-existing xfailed)
+# Run all tests (1,204 total, all passing)
 .venv/bin/python -m pytest tests/ -v
 
 # Run a specific test file
@@ -647,11 +715,25 @@ Additionally, the LLM layer handles provider-level rate limits gracefully via th
 # Run publish-specific tests
 .venv/bin/python -m pytest tests/test_publish.py tests/test_publish_api.py -v
 
+# Run analytics tests
+.venv/bin/python -m pytest tests/test_analytics_*.py -v
+
 # Lint check
 .venv/bin/ruff check src/ tests/
 ```
 
-Tests: 973 total (+168 new for publish/rate-limiting). 1 known failure (test_auth_failure_refreshes_token_and_retries — respx route dedup), 2 skipped, 10 xfailed (planned feature markers).
+Tests: 1,204 total across 34 test files (all passing, 0 regressions). Includes:
+
+| Test File | Tests | Area |
+|-----------|-------|------|
+| `test_analytics_data_store.py` | 318 | Data Store — DB connection, repositories, migrations |
+| `test_analytics_models.py` | 268 | Pydantic analytics model validation |
+| `test_analytics_scoring.py` | 145 | ScoreCalculator deterministic scoring |
+| `test_analytics_validation.py` | 268 | ValidationAnalyzer readability & gap analysis |
+| `test_analytics_export.py` | 226 | CSV & PDF export |
+| `test_analytics_trends.py` | 233 | TrendService period-over-period deltas |
+| `test_analytics_performance.py` | 212 | Performance tracking & metric collection |
+| Other test files | ~973 | Auth, API keys, subscriptions, publish, workflows, LLM, webhooks |
 
 ## Project Structure
 
@@ -669,14 +751,16 @@ repurpose-ai/
 │   │   ├── workflows.py       # Workflow CRUD + manual trigger
 │   │   ├── batch.py           # Batch repurpose endpoint
 │   │   ├── jobs.py            # Unified job status endpoint
-│   │   └── publish.py         # NEW: Multi-platform publish + OAuth2 endpoints
+│   │   ├── publish.py         # Multi-platform publish + OAuth2 endpoints
+│   │   └── analytics.py       # Analytics dashboard (15 endpoints)
 │   ├── models/
 │   │   ├── auth.py            # User, Token, API Key, BrandVoice models
 │   │   ├── content.py         # Content + 20 ContentFormat enum + FormatInfo
 │   │   ├── subscription.py    # Subscription models
 │   │   ├── webhook.py         # Webhook/async job models
 │   │   ├── workflow.py        # Workflow models + enums
-│   │   └── publish.py         # NEW: Publish models + PlatformCredentials
+│   │   ├── publish.py         # Publish models + PlatformCredentials
+│   │   └── analytics.py       # PostMetrics, AnalyticsSummary, OptimizationScore, ValidationReport, DataPoint, TrendData
 │   ├── services/
 │   │   ├── llm/               # Multi-Provider LLM Layer
 │   │   │   ├── base.py        # BaseLLMProvider abstract interface
@@ -699,9 +783,19 @@ repurpose-ai/
 │   │   ├── publish.py         # NEW: PublishService orchestrator
 │   │   ├── platform_auth.py   # NEW: OAuth2 auth service
 │   │   ├── rate_limiter.py    # NEW: Token-bucket rate limiter
-│   │   ├── workflow_engine.py # NEW: Workflow execution engine
-│   │   ├── scheduler.py      # NEW: asyncio scheduler
-│   │   └── workflow_store.py  # NEW: In-memory workflow store
+│   │   ├── workflow_engine.py # Workflow execution engine
+│   │   ├── scheduler.py      # asyncio scheduler
+│   │   ├── workflow_store.py  # In-memory workflow store
+│   │   └── analytics/         # Analytics Dashboard modules
+│   │       ├── db/
+│   │       │   ├── connection.py    # DatabaseConnection lifecycle
+│   │       │   ├── repository.py    # MetricsRepository, ValidationRepository, ScoreRepository
+│   │       │   └── migrations.py    # Migration/Migrator version management
+│   │       ├── metrics_collector.py     # MetricsCollector (P0.2)
+│   │       ├── score_calculator.py      # ScoreCalculator (P1.1)
+│   │       ├── validation_analyzer.py   # ValidationAnalyzer (P1.2)
+│   │       ├── export_service.py        # ExportService CSV/PDF (P1.3, P2.1)
+│   │       └── trend_service.py         # TrendService (P2.2)
 │   ├── dependencies.py        # Auth dependencies (get_current_user, etc.)
 │   ├── constants.py           # App constants (version)
 │   └── main.py                # FastAPI app factory
@@ -714,6 +808,13 @@ repurpose-ai/
 │   ├── test_llm_providers.py       # Multi-provider LLM tests (104)
 │   ├── test_format_templates.py    # Format template tests (98)
 │   ├── test_webhook_repurpose.py   # Webhook endpoint tests (88)
+│   ├── test_analytics_data_store.py   # 318 tests — Data Store
+│   ├── test_analytics_models.py       # 268 tests — Pydantic models
+│   ├── test_analytics_scoring.py      # 145 tests — Score calculation
+│   ├── test_analytics_validation.py   # 268 tests — Validation
+│   ├── test_analytics_export.py       # 226 tests — CSV/PDF export
+│   ├── test_analytics_trends.py       # 233 tests — Trend service
+│   ├── test_analytics_performance.py  # 212 tests — Performance tracking
 │   └── ...                         # Additional test files
 ├── Dockerfile                 # Railway container build
 ├── railway.toml               # Railway deployment config

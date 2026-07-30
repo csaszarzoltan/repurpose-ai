@@ -9,11 +9,11 @@ All notable changes to RepurposeAI will be documented in this file.
 - **Analytics Dashboard (7 modules)**:
   - **P0.1 Data Store** — DatabaseConnection with connect/disconnect lifecycle, in-memory MetricsRepository/ValidationRepository/ScoreRepository, Migration/Migrator version management
   - **P0.2 Content Performance Tracking** — MetricsCollector with collect/collect_range/normalise_metrics, API endpoints for list_posts, get_post, get_summary
-  - **P1.1 Platform Optimization Scoring** — ScoreCalculator with deterministic 0-100 scoring per platform, API endpoints for calculate/get optimization_score
-  - **P1.2 Validation Gap Analyzer** — ValidationAnalyzer with Flesch-Kincaid, Dale-Chall, ARI readability scores; diff blocks via difflib; tone consistency, faithfulness, and LLM judge analysis
+  - **P1.1 Platform Optimization Scoring** — ScoreCalculator with deterministic 0-100 scoring per platform (engagement_rate ×800 capped, completion_rate ×30, share_rate ×20, platform multiplier), API endpoints for calculate/get optimization_score
+  - **P1.2 Validation Gap Analyzer** — ValidationAnalyzer with Flesch-Kincaid, Dale-Chall, ARI readability scores; diff blocks via difflib; tone consistency, faithfulness (vocabulary overlap), and LLM judge (coherence/persuasiveness/clarity) analysis
   - **P1.3 CSV Export** — ExportService generating CSV strings with headers, in-memory schedule management (create/delete/list)
   - **P2.1 PDF Export** — ExportService returning PDF file path stubs, API endpoints for CSV/PDF export, schedule management
-  - **P2.2 Trend Visualization** — TrendService with period-over-period delta computation, top content ranking, trend summary; API endpoints for get_trend, trends_summary, top_content
+  - **P2.2 Trend Visualization** — TrendService with period-over-period delta computation (mean difference), top content ranking, trend summary; API endpoints for get_trend, trends_summary, top_content
 
 - **Models**: PostMetrics, AnalyticsSummary, OptimizationScore, ValidationReport, DataPoint, TrendData (Pydantic v2 with model_rebuild() for forward-reference resolution)
 
@@ -25,6 +25,9 @@ All notable changes to RepurposeAI will be documented in this file.
 
 - Added `docs/publish-integration.md` — full integration guide for multi-platform auto-publish (LinkedIn OAuth2, Twitter/X OAuth2 PKCE, Medium PAT)
 - README updated with multi-platform auto-publish feature documentation (platform setup, OAuth2 flow, dry-run mode, API reference, platform-specific guides)
+- Added `docs/analytics.md` — comprehensive per-feature guide for all 7 analytics dashboard modules (data store, content performance, optimization scoring, validation gap analysis, CSV/PDF export, trend visualization)
+- Added `examples/` directory with 6 working, runnable Python examples covering all analytics modules (verified — all pass)
+- README updated with Analytics Dashboard section (API endpoint table, module table, analytics quick-start, updated project structure, updated testing section with analytics test file table, version bumped to 0.7.0 in health check example)
 
 ### Tests
 
