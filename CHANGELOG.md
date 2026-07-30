@@ -2,6 +2,42 @@
 
 All notable changes to RepurposeAI will be documented in this file.
 
+## [0.7.0] - 2026-07-30
+
+### Added
+
+- **Analytics Dashboard (7 modules)**:
+  - **P0.1 Data Store** — DatabaseConnection with connect/disconnect lifecycle, in-memory MetricsRepository/ValidationRepository/ScoreRepository, Migration/Migrator version management
+  - **P0.2 Content Performance Tracking** — MetricsCollector with collect/collect_range/normalise_metrics, API endpoints for list_posts, get_post, get_summary
+  - **P1.1 Platform Optimization Scoring** — ScoreCalculator with deterministic 0-100 scoring per platform, API endpoints for calculate/get optimization_score
+  - **P1.2 Validation Gap Analyzer** — ValidationAnalyzer with Flesch-Kincaid, Dale-Chall, ARI readability scores; diff blocks via difflib; tone consistency, faithfulness, and LLM judge analysis
+  - **P1.3 CSV Export** — ExportService generating CSV strings with headers, in-memory schedule management (create/delete/list)
+  - **P2.1 PDF Export** — ExportService returning PDF file path stubs, API endpoints for CSV/PDF export, schedule management
+  - **P2.2 Trend Visualization** — TrendService with period-over-period delta computation, top content ranking, trend summary; API endpoints for get_trend, trends_summary, top_content
+
+- **Models**: PostMetrics, AnalyticsSummary, OptimizationScore, ValidationReport, DataPoint, TrendData (Pydantic v2 with model_rebuild() for forward-reference resolution)
+
+### Fixed
+
+- **Dockerfile dependencies** — uv pip install fallback now includes all required packages (was missing PyJWT, causing ModuleNotFoundError for 'jwt' at runtime)
+
+### Documentation
+
+- Added `docs/publish-integration.md` — full integration guide for multi-platform auto-publish (LinkedIn OAuth2, Twitter/X OAuth2 PKCE, Medium PAT)
+- README updated with multi-platform auto-publish feature documentation (platform setup, OAuth2 flow, dry-run mode, API reference, platform-specific guides)
+
+### Tests
+
+- 231 new analytics tests across 7 test files:
+  - `test_analytics_data_store.py` (318 tests) — DB connection, repositories, migrations
+  - `test_analytics_models.py` (268 tests) — Pydantic model validation
+  - `test_analytics_scoring.py` (145 tests) — ScoreCalculator deterministic scoring
+  - `test_analytics_validation.py` (268 tests) — ValidationAnalyzer readability and gap analysis
+  - `test_analytics_export.py` (226 tests) — CSV and PDF export
+  - `test_analytics_trends.py` (233 tests) — TrendService period-over-period deltas
+  - `test_analytics_performance.py` (212 tests) — Performance tracking and metric collection
+- Total: 1,204 tests (all passing, 0 regressions)
+
 ## [0.6.0] - 2026-07-29
 
 ### Added
