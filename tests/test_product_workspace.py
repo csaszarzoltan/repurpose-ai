@@ -440,3 +440,29 @@ def test_project_edit_preserves_variants_and_updates_reusable_settings(tmp_path,
     assert updated["brand_voice"] == "authoritative"
     existing = client.get(f'/api/v1/projects/{project["id"]}/variants').json()
     assert {item["id"] for item in existing} == {item["id"] for item in generated["variants"]}
+
+
+def test_archived_projects_can_be_restored_without_losing_variants(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    project = _create_project(client)
+    generated = client.post(f'/api/v1/projects/{project["id"]}/generate').json()
+    assert client.delete(f'/api/v1/projects/{project["id"]}').status_code == 204
+    assert client.get('/api/v1/projects').json() == []
+
+    restored = client.post(f'/api/v1/projects/{project["id"]}/restore')
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["status"] == "draft"
+    assert [item["id"] for item in client.get('/api/v1/projects').json()] == [project["id"]]
+    variants = client.get(f'/api/v1/projects/{project["id"]}/variants').json()
+    assert {item["id"] for item in variants} == {item["id"] for item in generated["variants"]}
+
+
+def test_workspace_exposes_archived_view_restore_and_archive_confirmation(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    html = client.get('/').text
+    script = client.get('/assets/app.js').text
+    assert 'id="show-archived"' in html
+    assert 'Archived projects' in html
+    assert 'Restore project' in script
+    assert '/restore' in script
+    assert 'window.confirm' in script

@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0] - 2026-08-01
+
+### Added
+- Owner-scoped restoration of archived projects without losing source data or generated-version history.
+- Archived-project filtering and restore controls in the main workspace.
+- Archive confirmation that communicates the recovery path.
+- TDD acceptance coverage for archive visibility, restoration, and history preservation.
+
+### Changed
+- Archived project cards now expose only view and restore actions.
+- Application and package versions synchronized to 1.5.0.
+
+
 ## [1.4.0] - 2026-08-01
 
 ### Added

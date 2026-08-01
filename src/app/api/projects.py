@@ -123,6 +123,23 @@ async def duplicate_project(
     return project
 
 
+@router.post("/projects/{project_id}/restore", response_model=ProjectResponse)
+async def restore_archived_project(
+    project_id: str,
+    user: UserResponse | None = Depends(get_optional_user),
+    x_workspace_id: str | None = Header(default=None),
+) -> ProjectResponse:
+    owner = _owner(user, x_workspace_id)
+    try:
+        project = _store().restore_project(owner, project_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Project not found") from None
+    _store().record_event(
+        owner, TelemetryEvent(event_name="project_updated", properties={"action": "restore"})
+    )
+    return project
+
+
 @router.delete("/projects/{project_id}", status_code=204)
 async def archive_project(
     project_id: str,

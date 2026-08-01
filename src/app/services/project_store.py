@@ -181,6 +181,13 @@ class ProjectStore:
     def archive(self, owner_id: str, project_id: str) -> None:
         self.update(owner_id, project_id, ProjectUpdate(status=ProjectStatus.ARCHIVED))
 
+    def restore_project(self, owner_id: str, project_id: str) -> ProjectResponse:
+        """Restore an archived project without touching its immutable variant history."""
+        project = self.get(owner_id, project_id)
+        if project.status != ProjectStatus.ARCHIVED:
+            return project
+        return self.update(owner_id, project_id, ProjectUpdate(status=ProjectStatus.DRAFT))
+
     def workspace_summary(self, owner_id: str) -> WorkspaceSummary:
         """Return bounded attention counts based only on each format's latest version."""
         with self._connect() as db:
