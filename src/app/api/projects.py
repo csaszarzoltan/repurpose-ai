@@ -17,8 +17,8 @@ from app.models.project import (
     VariantResponse,
     VariantUpdate,
 )
+from app.services.generation_factory import build_generation_service
 from app.services.project_store import ProjectStore
-from app.services.repurpose import RepurposeService
 
 if TYPE_CHECKING:
     from app.models.auth import UserResponse
@@ -139,17 +139,22 @@ async def generate_project_variants(
         body=project.body,
         source_format=project.source_format,
     )
-    result = await RepurposeService(user=user).repurpose(
+    service, generation_mode = build_generation_service(user=user)
+    result = await service.repurpose(
         content=content,
         target_formats=project.target_formats,
         brand_voice=project.brand_voice,
         custom_instructions=project.custom_instructions,
     )
-    generation_mode = "template_fallback"
-    warning = (
-        "Generated drafts use template fallback because no configured LLM router "
-        "is available in this workspace. Review every draft before publishing."
-    )
+    warning = None
+    if generation_mode == "template_fallback":
+        warning = (
+            "Generated drafts use template fallback because no configured LLM provider "
+            "is available in this workspace. Review every draft before publishing."
+        )
+    elif result.warnings:
+        generation_mode = "llm_fallback"
+        warning = " ".join(result.warnings)
     variants = [
         store.create_variant(
             owner_id=owner,

@@ -18,6 +18,9 @@ async def health_check() -> dict:
         "timestamp": datetime.now(UTC).isoformat(),
         "capabilities": {
             "content_workspace": "available",
+            "llm_generation": "available_when_configured",
+            "variant_history": "available",
+            "saved_recipes": "available",
             "project_persistence": "available",
             "pdf_export": "scaffold",
             "analytics_data": "scaffold",

@@ -170,3 +170,143 @@ def test_workspace_exposes_generation_and_variant_feedback(tmp_path, monkeypatch
     assert "Generate drafts" in html
     assert 'id="variants"' in html
     assert "Generated drafts use template fallback" in html
+
+
+def test_llm_factory_registers_only_configured_providers(monkeypatch):
+    from app.services.generation_factory import build_generation_service
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    service, mode = build_generation_service()
+    assert mode == "template_fallback"
+    assert service.llm_router is None
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    service, mode = build_generation_service()
+    assert mode == "llm"
+    assert list(service.llm_router.providers) == ["openai"]
+    assert len(service.format_registry.list_all()) == 20
+
+
+def test_generation_endpoint_uses_injected_llm_service(tmp_path, monkeypatch):
+    from app.api import projects as projects_api
+    from app.models.content import RepurposeResponse
+
+    class FakeGenerationService:
+        llm_router = object()
+        format_registry = object()
+
+        async def repurpose(self, content, target_formats, **kwargs):
+            return RepurposeResponse(
+                original_id=content.id or "",
+                repurposed={item: f"LLM result for {item.value}" for item in target_formats},
+            )
+
+    monkeypatch.setattr(
+        projects_api,
+        "build_generation_service",
+        lambda user=None: (FakeGenerationService(), "llm"),
+    )
+    client = _client(tmp_path, monkeypatch)
+    project = _create_project(client)
+    response = client.post(f'/api/v1/projects/{project["id"]}/generate')
+    assert response.status_code == 201
+    data = response.json()
+    assert data["generation_mode"] == "llm"
+    assert data["warning"] is None
+    assert all(item["generation_mode"] == "llm" for item in data["variants"])
+
+
+def test_generation_reports_llm_failure_fallback_honestly(tmp_path, monkeypatch):
+    from app.api import projects as projects_api
+    from app.models.content import RepurposeResponse
+
+    class FailingProviderService:
+        async def repurpose(self, content, target_formats, **kwargs):
+            return RepurposeResponse(
+                original_id=content.id or "",
+                repurposed={item: content.body for item in target_formats},
+                warnings=["LLM generation failed for 'linkedin_post': provider unavailable"],
+            )
+
+    monkeypatch.setattr(
+        projects_api,
+        "build_generation_service",
+        lambda user=None: (FailingProviderService(), "llm"),
+    )
+    client = _client(tmp_path, monkeypatch)
+    project = _create_project(client)
+    data = client.post(f'/api/v1/projects/{project["id"]}/generate').json()
+    assert data["generation_mode"] == "llm_fallback"
+    assert "provider unavailable" in data["warning"]
+    assert all(item["generation_mode"] == "llm_fallback" for item in data["variants"])
+
+
+
+def _recipe_payload() -> dict:
+    return {
+        "name": "Weekly social pack",
+        "target_formats": ["linkedin_post", "twitter_thread"],
+        "brand_voice": "friendly",
+        "custom_instructions": "Lead with the most useful customer outcome.",
+    }
+
+
+def test_recipe_crud_is_persistent_and_owner_scoped(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    created = client.post("/api/v1/recipes", json=_recipe_payload())
+    assert created.status_code == 201, created.text
+    recipe = created.json()
+    assert recipe["name"] == "Weekly social pack"
+    assert recipe["target_formats"] == ["linkedin_post", "twitter_thread"]
+
+    listed = client.get("/api/v1/recipes").json()
+    assert [item["id"] for item in listed] == [recipe["id"]]
+
+    changed = client.patch(
+        f'/api/v1/recipes/{recipe["id"]}',
+        json={"name": "Updated social pack", "brand_voice": "professional"},
+    )
+    assert changed.status_code == 200
+    assert changed.json()["name"] == "Updated social pack"
+    assert changed.json()["brand_voice"] == "professional"
+
+    other = client.get("/api/v1/recipes", headers={"X-Workspace-ID": "other-workspace"})
+    assert other.json() == []
+
+    deleted = client.delete(f'/api/v1/recipes/{recipe["id"]}')
+    assert deleted.status_code == 204
+    assert client.get("/api/v1/recipes").json() == []
+
+
+def test_create_project_from_recipe_reuses_daily_defaults(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    recipe = client.post("/api/v1/recipes", json=_recipe_payload()).json()
+    response = client.post(
+        f'/api/v1/recipes/{recipe["id"]}/projects',
+        json={"title": "August release", "body": "The release reduces setup time."},
+    )
+    assert response.status_code == 201, response.text
+    project = response.json()
+    assert project["title"] == "August release"
+    assert project["target_formats"] == recipe["target_formats"]
+    assert project["brand_voice"] == recipe["brand_voice"]
+    assert project["custom_instructions"] == recipe["custom_instructions"]
+
+
+def test_recipe_validation_rejects_blank_name_and_duplicate_formats(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    payload = _recipe_payload()
+    payload["name"] = "  "
+    payload["target_formats"] = ["linkedin_post", "linkedin_post"]
+    response = client.post("/api/v1/recipes", json=payload)
+    assert response.status_code == 422
+
+
+def test_workspace_exposes_saved_recipe_controls(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    html = client.get("/").text
+    assert "Saved recipes" in html
+    assert 'id="recipe-select"' in html
+    assert "Save as recipe" in html

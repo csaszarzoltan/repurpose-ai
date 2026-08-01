@@ -9,3 +9,39 @@ function card(project){const li=document.createElement('li');li.className='proje
 async function load(){say('Loading projects…');try{const response=await fetch('/api/v1/projects');if(!response.ok)throw new Error('Could not load projects');const projects=await response.json();list.replaceChildren(...projects.map(card));empty.hidden=projects.length>0;say(projects.length?`${projects.length} project${projects.length===1?'':'s'} loaded.`:'No saved projects.')}catch(error){say(`${error.message}. Try Refresh.`)}}
 form.addEventListener('submit',async event=>{event.preventDefault();if(!validate()){say('Fix the highlighted fields.');document.querySelector('.error:not(:empty)')?.previousElementSibling?.focus();return}const payload={title:form.title.value.trim(),body:form.body.value.trim(),source_format:'blog_post',target_formats:[...form.querySelectorAll('[name=formats]:checked')].map(x=>x.value),brand_voice:form.voice.value,custom_instructions:document.querySelector('#instructions').value.trim()||null};say('Saving project…');const response=await fetch('/api/v1/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!response.ok){say('Project could not be saved. Your input is still here.');return}const project=await response.json();say(`${project.title} saved. You can generate drafts now.`);form.reset();form.querySelector('[value=linkedin_post]').checked=true;await load()});
 document.querySelector('#refresh').addEventListener('click',load);load();
+
+const recipeSelect=document.querySelector('#recipe-select');
+let savedRecipes=[];
+async function loadRecipes(){
+  try{
+    const response=await fetch('/api/v1/recipes');
+    if(!response.ok)throw new Error('Could not load recipes');
+    savedRecipes=await response.json();
+    const options=savedRecipes.map(recipe=>{
+      const option=document.createElement('option');
+      option.value=recipe.id;option.textContent=recipe.name;return option;
+    });
+    recipeSelect.replaceChildren(new Option('No recipe selected',''),...options);
+  }catch(error){say(`${error.message}. Project creation is still available.`)}
+}
+document.querySelector('#apply-recipe').addEventListener('click',()=>{
+  const recipe=savedRecipes.find(item=>item.id===recipeSelect.value);
+  if(!recipe){say('Choose a saved recipe first.');return}
+  for(const box of form.querySelectorAll('[name=formats]'))box.checked=recipe.target_formats.includes(box.value);
+  form.voice.value=recipe.brand_voice;
+  document.querySelector('#instructions').value=recipe.custom_instructions||'';
+  say(`${recipe.name} applied. Add the title and source content.`);
+});
+document.querySelector('#save-recipe').addEventListener('click',async()=>{
+  const formats=[...form.querySelectorAll('[name=formats]:checked')].map(item=>item.value);
+  if(!formats.length){document.querySelector('#formats-error').textContent='Choose at least one destination.';say('Choose formats before saving a recipe.');return}
+  const suggested=form.title.value.trim()?`${form.title.value.trim()} recipe`:'My content recipe';
+  const name=window.prompt('Recipe name',suggested);
+  if(!name||!name.trim()){say('Recipe was not saved.');return}
+  const response=await fetch('/api/v1/recipes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim(),target_formats:formats,brand_voice:form.voice.value,custom_instructions:document.querySelector('#instructions').value.trim()||null})});
+  if(!response.ok){say('Recipe could not be saved. Check its name and formats.');return}
+  const recipe=await response.json();
+  say(`${recipe.name} saved for reuse.`);
+  await loadRecipes();recipeSelect.value=recipe.id;
+});
+loadRecipes();

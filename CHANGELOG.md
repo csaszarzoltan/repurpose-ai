@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.1.0] - 2026-08-01
+
+### Added
+- Persistent, owner-scoped generation recipes for frequently repeated content workflows.
+- Recipe create, list, update, delete, and create-project-from-recipe APIs.
+- Workspace controls to save the current format, brand voice, and guidance settings as a recipe.
+- One-action recipe application to reduce repeated configuration.
+- Validation preventing blank recipe names and duplicate target formats.
+- TDD acceptance coverage for recipe persistence, tenant isolation, validation, reuse, and UI controls.
+
+### Changed
+- The primary create workflow now remembers reusable user defaults without coupling recipes to historical projects.
+- Application and package versions synchronized to 1.1.0.
+
+
+## [1.0.0] - 2026-08-01
+
+### Added
+- Workspace generation factory that automatically registers only LLM providers with configured API keys.
+- All 20 format templates are wired into workspace generation when an LLM provider is available.
+- Explicit `llm`, `template_fallback`, and `llm_fallback` generation modes.
+- Honest provider-failure warnings persisted with generated variants and returned to the workspace.
+- TDD coverage for provider discovery, configured LLM generation, and provider-failure fallback reporting.
+
+### Changed
+- The workspace now uses real LLM generation when `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` is configured.
+- Providers without credentials are not registered or called.
+- Application and package versions synchronized to 1.0.0.
+
+
 ## [0.9.0] - 2026-08-01
 
 ### Added

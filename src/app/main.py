@@ -17,6 +17,7 @@ from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
 from app.api.projects import router as projects_router
 from app.api.publish import router as publish_router
+from app.api.recipes import router as recipes_router
 from app.api.repurpose import router as repurpose_router
 from app.api.subscription import router as subscription_router
 from app.api.web_ui import WEB
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(api_keys_router)
     app.include_router(projects_router)
+    app.include_router(recipes_router)
     app.include_router(workflows_router)
     app.include_router(batch_router)
     app.include_router(jobs_router)

@@ -63,3 +63,55 @@ No test failed. The xfails remain pre-existing planned-feature markers.
 ```text
 All checks passed!
 ```
+
+# v1.0.0 Continuation Validation
+
+## TDD red phase
+
+Provider-factory and endpoint-injection acceptance tests were added before implementation and failed because no production generation factory existed. A further trust test failed until configured-provider warnings were represented as `llm_fallback` rather than successful `llm` output.
+
+## Workspace and generation acceptance suite
+
+```text
+12 passed
+```
+
+## Full regression after v1.0.0
+
+```text
+1204 passed, 2 skipped, 10 xfailed
+```
+
+No test failed. The ten xfails are inherited planned-feature markers.
+
+## Changed-file static validation
+
+```text
+All checks passed!
+```
+
+# v1.1.0 Continuation Validation
+
+## TDD red phase
+
+Four recipe acceptance tests were added before implementation. They failed because recipe routes, persistence, validation, project reuse, and workspace controls did not yet exist.
+
+## Workspace acceptance suite
+
+```text
+16 passed
+```
+
+## Full regression after v1.1.0
+
+```text
+1208 passed, 2 skipped, 10 xfailed
+```
+
+No test failed. The ten xfails remain inherited planned-feature markers.
+
+## Changed-file static validation
+
+```text
+All checks passed!
+```

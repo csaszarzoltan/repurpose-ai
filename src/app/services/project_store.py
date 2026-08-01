@@ -13,6 +13,9 @@ from app.models.project import (
     ProjectResponse,
     ProjectStatus,
     ProjectUpdate,
+    RecipeCreate,
+    RecipeResponse,
+    RecipeUpdate,
     TelemetryEvent,
     VariantResponse,
     VariantStatus,
@@ -79,6 +82,18 @@ class ProjectStore:
                     ON content_variants(project_id, format, version);
                 CREATE INDEX IF NOT EXISTS ix_variants_project_created
                     ON content_variants(owner_id, project_id, created_at DESC);
+                CREATE TABLE IF NOT EXISTS generation_recipes (
+                    id TEXT PRIMARY KEY,
+                    owner_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    target_formats TEXT NOT NULL,
+                    brand_voice TEXT NOT NULL,
+                    custom_instructions TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_recipes_owner_updated
+                    ON generation_recipes(owner_id, updated_at DESC);
                 """
             )
 
@@ -239,3 +254,83 @@ class ProjectStore:
             generation_mode="manual_edit",
             status=status,
         )
+
+
+    @staticmethod
+    def _recipe_row(row: sqlite3.Row) -> RecipeResponse:
+        data = dict(row)
+        data["target_formats"] = json.loads(data["target_formats"])
+        return RecipeResponse.model_validate(data)
+
+    def create_recipe(self, owner_id: str, payload: RecipeCreate) -> RecipeResponse:
+        recipe_id, timestamp = str(uuid.uuid4()), _now()
+        with self._connect() as db:
+            db.execute(
+                """INSERT INTO generation_recipes
+                (id, owner_id, name, target_formats, brand_voice, custom_instructions,
+                 created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    recipe_id,
+                    owner_id,
+                    payload.name,
+                    json.dumps([item.value for item in payload.target_formats]),
+                    payload.brand_voice.value,
+                    payload.custom_instructions,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+        return self.get_recipe(owner_id, recipe_id)
+
+    def list_recipes(self, owner_id: str) -> list[RecipeResponse]:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT * FROM generation_recipes WHERE owner_id = ? "
+                "ORDER BY updated_at DESC LIMIT 100",
+                (owner_id,),
+            ).fetchall()
+        return [self._recipe_row(row) for row in rows]
+
+    def get_recipe(self, owner_id: str, recipe_id: str) -> RecipeResponse:
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT * FROM generation_recipes WHERE owner_id = ? AND id = ?",
+                (owner_id, recipe_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(recipe_id)
+        return self._recipe_row(row)
+
+    def update_recipe(
+        self, owner_id: str, recipe_id: str, payload: RecipeUpdate
+    ) -> RecipeResponse:
+        changes = payload.model_dump(exclude_unset=True)
+        if not changes:
+            return self.get_recipe(owner_id, recipe_id)
+        if "target_formats" in changes:
+            changes["target_formats"] = json.dumps(
+                [item.value for item in changes["target_formats"]]
+            )
+        if "brand_voice" in changes and changes["brand_voice"] is not None:
+            changes["brand_voice"] = changes["brand_voice"].value
+        changes["updated_at"] = _now()
+        assignments = ", ".join(f"{key} = ?" for key in changes)
+        values = list(changes.values()) + [owner_id, recipe_id]
+        with self._connect() as db:
+            result = db.execute(
+                f"UPDATE generation_recipes SET {assignments} "
+                "WHERE owner_id = ? AND id = ?",
+                values,
+            )
+            if result.rowcount == 0:
+                raise KeyError(recipe_id)
+        return self.get_recipe(owner_id, recipe_id)
+
+    def delete_recipe(self, owner_id: str, recipe_id: str) -> None:
+        with self._connect() as db:
+            result = db.execute(
+                "DELETE FROM generation_recipes WHERE owner_id = ? AND id = ?",
+                (owner_id, recipe_id),
+            )
+            if result.rowcount == 0:
+                raise KeyError(recipe_id)
