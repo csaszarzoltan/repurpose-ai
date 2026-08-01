@@ -1,6 +1,6 @@
 # RepurposeAI
 
-> **v1.1.0:** RepurposeAI now includes a responsive content workspace at `/`, reusable saved recipes for frequent workflows, configured OpenRouter/OpenAI/Anthropic generation, honest fallback reporting, durable project and variant history, review controls, production authentication enforcement, and privacy-safe telemetry. The existing API remains available at `/docs`.
+> **v1.2.0:** RepurposeAI now includes a responsive content workspace at `/`, reusable saved recipes for frequent workflows, configured OpenRouter/OpenAI/Anthropic generation, honest fallback reporting, durable project and variant history, review controls, production authentication enforcement, and privacy-safe telemetry. The existing API remains available at `/docs`.
 
 ## User workspace quick start
 
@@ -12,7 +12,7 @@ export REPURPOSEAI_DATA_DIR=./data
 uvicorn app.main:app --reload
 ```
 
-Open `http://localhost:8000/` to create and resume projects. In production, set `ENVIRONMENT=production`; project and telemetry routes then require JWT authentication. See [`docs/v1.1.0-workspace.md`](docs/v1.1.0-workspace.md) and [`docs/reports/implementation-report.md`](docs/reports/implementation-report.md).
+Open `http://localhost:8000/` to create and resume projects. In production, set `ENVIRONMENT=production`; project and telemetry routes then require JWT authentication. See [`docs/v1.2.0-workspace.md`](docs/v1.2.0-workspace.md) and [`docs/reports/implementation-report.md`](docs/reports/implementation-report.md).
 
 
 AI-powered content repurposing tool that transforms one piece of content into 20+ platform-optimized formats, powered by multi-provider LLM support (OpenAI, Anthropic, OpenRouter).

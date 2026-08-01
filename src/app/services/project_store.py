@@ -19,6 +19,7 @@ from app.models.project import (
     TelemetryEvent,
     VariantResponse,
     VariantStatus,
+    WorkspaceSummary,
 )
 
 
@@ -164,6 +165,51 @@ class ProjectStore:
 
     def archive(self, owner_id: str, project_id: str) -> None:
         self.update(owner_id, project_id, ProjectUpdate(status=ProjectStatus.ARCHIVED))
+
+    def workspace_summary(self, owner_id: str) -> WorkspaceSummary:
+        """Return bounded attention counts based only on each format's latest version."""
+        with self._connect() as db:
+            active_projects = db.execute(
+                "SELECT COUNT(*) FROM content_projects WHERE owner_id = ? AND status != ?",
+                (owner_id, ProjectStatus.ARCHIVED.value),
+            ).fetchone()[0]
+            projects_without_drafts = db.execute(
+                """SELECT COUNT(*) FROM content_projects p
+                WHERE p.owner_id = ? AND p.status != ? AND NOT EXISTS (
+                    SELECT 1 FROM content_variants v
+                    WHERE v.owner_id = p.owner_id AND v.project_id = p.id
+                )""",
+                (owner_id, ProjectStatus.ARCHIVED.value),
+            ).fetchone()[0]
+            rows = db.execute(
+                """WITH latest AS (
+                    SELECT project_id, format, MAX(version) AS version
+                    FROM content_variants WHERE owner_id = ? GROUP BY project_id, format
+                )
+                SELECT v.status, v.generation_mode, COUNT(*) AS count
+                FROM content_variants v JOIN latest l
+                  ON l.project_id = v.project_id AND l.format = v.format AND l.version = v.version
+                JOIN content_projects p ON p.id = v.project_id
+                WHERE v.owner_id = ? AND p.status != ?
+                GROUP BY v.status, v.generation_mode""",
+                (owner_id, owner_id, ProjectStatus.ARCHIVED.value),
+            ).fetchall()
+        draft = approved = fallback = 0
+        for row in rows:
+            count = int(row["count"])
+            if row["status"] == VariantStatus.DRAFT.value:
+                draft += count
+                if row["generation_mode"] in {"template_fallback", "llm_fallback"}:
+                    fallback += count
+            elif row["status"] == VariantStatus.APPROVED.value:
+                approved += count
+        return WorkspaceSummary(
+            active_projects=active_projects,
+            projects_without_drafts=projects_without_drafts,
+            draft_variants=draft,
+            approved_variants=approved,
+            fallback_variants_needing_review=fallback,
+        )
 
     def record_event(self, owner_id: str, event: TelemetryEvent) -> None:
         with self._connect() as db:

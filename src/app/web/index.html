@@ -20,6 +20,12 @@
     <p class="eyebrow">Content workspace</p>
     <h1 id="page-title">Create once. Reuse everywhere.</h1>
     <p>Save the source, choose your everyday formats, generate drafts, and resume work without rebuilding requests.</p>
+    <dl id="workspace-summary" class="summary-grid" aria-label="Workspace attention summary">
+      <div><dt>Active projects</dt><dd id="summary-projects">0</dd></div>
+      <div><dt>Need drafts</dt><dd id="summary-needs-drafts">0</dd></div>
+      <div><dt>Drafts to review</dt><dd id="summary-drafts">0</dd></div>
+      <div><dt>Approved</dt><dd id="summary-approved">0</dd></div>
+    </dl>
   </section>
   <div class="workspace-grid">
     <section class="panel" aria-labelledby="create-title">
@@ -33,6 +39,7 @@
         </div>
       </section>
       <form id="project-form" novalidate>
+        <p id="draft-state" class="draft-state" role="status" aria-live="polite">Local draft autosave is ready.</p>
         <label for="title">Project title <span aria-hidden="true">*</span></label>
         <input id="title" name="title" required maxlength="200" autocomplete="off" aria-describedby="title-help title-error">
         <p class="hint" id="title-help">Use a name you can recognize later.</p><p class="error" id="title-error"></p>
@@ -55,6 +62,8 @@
     </section>
     <section class="panel" aria-labelledby="recent-title">
       <div class="section-heading"><div><h2 id="recent-title">Recent projects</h2><p>Pick up where you left off, then choose Generate drafts.</p></div><button id="refresh" type="button">Refresh</button></div>
+      <label for="project-search">Search projects</label>
+      <div class="search-row"><input id="project-search" type="search" aria-label="Search saved projects" placeholder="Search by title or source text"><button id="search-button" type="button">Search</button><button id="clear-search" type="button">Clear</button></div>
       <div id="status" role="status" aria-live="polite"></div>
       <ul id="projects" class="project-list" aria-label="Saved content projects"></ul>
       <div id="empty" class="empty"><h3>No saved projects yet</h3><p>Your first saved source will appear here.</p></div>

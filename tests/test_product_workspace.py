@@ -310,3 +310,46 @@ def test_workspace_exposes_saved_recipe_controls(tmp_path, monkeypatch):
     assert "Saved recipes" in html
     assert 'id="recipe-select"' in html
     assert "Save as recipe" in html
+
+
+def test_workspace_summary_prioritizes_daily_attention(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    project = _create_project(client)
+    summary = client.get('/api/v1/workspace/summary')
+    assert summary.status_code == 200
+    assert summary.json() == {
+        'active_projects': 1,
+        'projects_without_drafts': 1,
+        'draft_variants': 0,
+        'approved_variants': 0,
+        'fallback_variants_needing_review': 0,
+    }
+
+    generated = client.post(f'/api/v1/projects/{project["id"]}/generate').json()
+    variant = generated['variants'][0]
+    summary = client.get('/api/v1/workspace/summary').json()
+    assert summary['projects_without_drafts'] == 0
+    assert summary['draft_variants'] == 2
+    assert summary['fallback_variants_needing_review'] == 2
+
+    client.patch(
+        f'/api/v1/projects/{project["id"]}/variants/{variant["id"]}',
+        json={'content': 'Reviewed copy.', 'status': 'approved'},
+    )
+    summary = client.get('/api/v1/workspace/summary').json()
+    assert summary['draft_variants'] == 1
+    assert summary['approved_variants'] == 1
+    assert summary['fallback_variants_needing_review'] == 1
+
+
+def test_workspace_ui_exposes_search_attention_autosave_and_history(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    html = client.get('/').text
+    script = client.get('/assets/app.js').text
+    assert 'id="workspace-summary"' in html
+    assert 'id="project-search"' in html
+    assert 'id="draft-state"' in html
+    assert 'View history' in script
+    assert 'localStorage' in script
+    assert '/api/v1/workspace/summary' in script
+    assert 'aria-label="Search saved projects"' in html

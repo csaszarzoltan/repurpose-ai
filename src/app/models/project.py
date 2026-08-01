@@ -67,6 +67,16 @@ class ProjectResponse(BaseModel):
     updated_at: datetime
 
 
+class WorkspaceSummary(BaseModel):
+    """Small attention summary for the repeated daily workspace workflow."""
+
+    active_projects: int = 0
+    projects_without_drafts: int = 0
+    draft_variants: int = 0
+    approved_variants: int = 0
+    fallback_variants_needing_review: int = 0
+
+
 class TelemetryEvent(BaseModel):
     event_name: str = Field(pattern=r"^(workspace_viewed|project_created|project_updated|project_archived|generation_started)$")
     properties: dict[str, str | int | float | bool | None] = Field(default_factory=dict)

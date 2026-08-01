@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0] - 2026-08-01
+
+### Added
+- Owner-scoped workspace attention summary for active projects, projects needing drafts, drafts awaiting review, approved variants, and fallback review risk.
+- Search controls for the existing bounded project search API.
+- Debounced browser-local create-form autosave and refresh recovery with accessible status feedback.
+- On-demand per-format variant history in the review workspace.
+- TDD acceptance coverage and v1.2.0 product, implementation, and test reports.
+
+### Changed
+- Workspace summary refreshes after save, generation, revision, approval, and archive actions.
+- Application and package versions synchronized to 1.2.0.
+
+
 ## [1.1.0] - 2026-08-01
 
 ### Added

@@ -16,6 +16,7 @@ from app.models.project import (
     TelemetryEvent,
     VariantResponse,
     VariantUpdate,
+    WorkspaceSummary,
 )
 from app.services.generation_factory import build_generation_service
 from app.services.project_store import ProjectStore
@@ -52,6 +53,14 @@ async def create_project(
     )
     _store().record_event(owner, event)
     return project
+
+
+@router.get("/workspace/summary", response_model=WorkspaceSummary)
+async def workspace_summary(
+    user: UserResponse | None = Depends(get_optional_user),
+    x_workspace_id: str | None = Header(default=None),
+) -> WorkspaceSummary:
+    return _store().workspace_summary(_owner(user, x_workspace_id))
 
 
 @router.get("/projects", response_model=list[ProjectResponse])
