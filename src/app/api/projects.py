@@ -11,6 +11,7 @@ from app.models.content import ContentItem
 from app.models.project import (
     GenerationResponse,
     ProjectCreate,
+    ProjectDuplicate,
     ProjectResponse,
     ProjectUpdate,
     TelemetryEvent,
@@ -101,6 +102,24 @@ async def update_project(
         event_name="project_updated", properties={"changed_fields": len(payload.model_fields_set)}
     )
     _store().record_event(owner, event)
+    return project
+
+
+@router.post("/projects/{project_id}/duplicate", response_model=ProjectResponse, status_code=201)
+async def duplicate_project(
+    project_id: str,
+    payload: ProjectDuplicate,
+    user: UserResponse | None = Depends(get_optional_user),
+    x_workspace_id: str | None = Header(default=None),
+) -> ProjectResponse:
+    owner = _owner(user, x_workspace_id)
+    try:
+        project = _store().duplicate(owner, project_id, payload.title)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Project not found") from None
+    _store().record_event(
+        owner, TelemetryEvent(event_name="project_created", properties={"source": "duplicate"})
+    )
     return project
 
 
@@ -202,6 +221,25 @@ async def list_project_variants(
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="Project not found") from None
+
+
+@router.post(
+    "/projects/{project_id}/variants/{variant_id}/restore",
+    response_model=VariantResponse,
+    status_code=201,
+)
+async def restore_project_variant(
+    project_id: str,
+    variant_id: str,
+    user: UserResponse | None = Depends(get_optional_user),
+    x_workspace_id: str | None = Header(default=None),
+) -> VariantResponse:
+    try:
+        return _store().restore_variant(
+            _owner(user, x_workspace_id), project_id, variant_id
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Variant not found") from None
 
 
 @router.patch(

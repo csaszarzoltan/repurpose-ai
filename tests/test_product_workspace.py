@@ -353,3 +353,54 @@ def test_workspace_ui_exposes_search_attention_autosave_and_history(tmp_path, mo
     assert 'localStorage' in script
     assert '/api/v1/workspace/summary' in script
     assert 'aria-label="Search saved projects"' in html
+
+
+def test_duplicate_project_reuses_settings_without_variants(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    project = _create_project(client)
+    client.post(f'/api/v1/projects/{project["id"]}/generate')
+
+    response = client.post(
+        f'/api/v1/projects/{project["id"]}/duplicate',
+        json={"title": "Generate me copy"},
+    )
+    assert response.status_code == 201, response.text
+    duplicate = response.json()
+    assert duplicate["id"] != project["id"]
+    assert duplicate["title"] == "Generate me copy"
+    assert duplicate["body"] == project["body"]
+    assert duplicate["target_formats"] == project["target_formats"]
+    assert duplicate["brand_voice"] == project["brand_voice"]
+    assert duplicate["status"] == "draft"
+    assert client.get(f'/api/v1/projects/{duplicate["id"]}/variants').json() == []
+
+
+def test_restore_variant_creates_new_version_from_history(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    project = _create_project(client)
+    original = client.post(f'/api/v1/projects/{project["id"]}/generate').json()["variants"][0]
+    revised = client.patch(
+        f'/api/v1/projects/{project["id"]}/variants/{original["id"]}',
+        json={"content": "Second version", "status": "approved"},
+    ).json()
+
+    restored = client.post(
+        f'/api/v1/projects/{project["id"]}/variants/{original["id"]}/restore'
+    )
+    assert restored.status_code == 201, restored.text
+    data = restored.json()
+    assert data["version"] == revised["version"] + 1
+    assert data["content"] == original["content"]
+    assert data["status"] == "draft"
+    assert data["generation_mode"] == "history_restore"
+
+
+def test_workspace_ui_exposes_duplicate_restore_and_fallback_attention(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    html = client.get('/').text
+    script = client.get('/assets/app.js').text
+    assert 'id="summary-fallback"' in html
+    assert 'Create similar' in script
+    assert 'Restore this version' in script
+    assert '/duplicate' in script
+    assert '/restore' in script

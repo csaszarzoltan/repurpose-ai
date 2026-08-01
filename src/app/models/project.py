@@ -37,6 +37,22 @@ class ProjectCreate(BaseModel):
         return list(dict.fromkeys(values))
 
 
+class ProjectDuplicate(BaseModel):
+    """Optional naming override when repeating a successful project setup."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @field_validator("title")
+    @classmethod
+    def duplicate_title_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+
 class ProjectUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     body: str | None = Field(default=None, min_length=1, max_length=100_000)

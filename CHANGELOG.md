@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0] - 2026-08-01
+
+### Added
+- Non-destructive restoration of any historical variant as a new draft version.
+- One-action project duplication that reuses source and configuration without copying variants or publication state.
+- Visible fallback-review attention count in the workspace summary.
+- TDD acceptance coverage and v1.3.0 product, implementation, and validation reports.
+
+### Changed
+- Application and package versions synchronized to 1.3.0.
+
+
 ## [1.2.0] - 2026-08-01
 
 ### Added

@@ -163,6 +163,21 @@ class ProjectStore:
                 raise KeyError(project_id)
         return self.get(owner_id, project_id)
 
+    def duplicate(self, owner_id: str, project_id: str, title: str | None = None) -> ProjectResponse:
+        """Copy reusable project inputs while deliberately excluding variants and status."""
+        source = self.get(owner_id, project_id)
+        return self.create(
+            owner_id,
+            ProjectCreate(
+                title=title or f"{source.title} copy",
+                body=source.body,
+                source_format=source.source_format,
+                target_formats=source.target_formats,
+                brand_voice=source.brand_voice,
+                custom_instructions=source.custom_instructions,
+            ),
+        )
+
     def archive(self, owner_id: str, project_id: str) -> None:
         self.update(owner_id, project_id, ProjectUpdate(status=ProjectStatus.ARCHIVED))
 
@@ -282,6 +297,20 @@ class ProjectStore:
             params = (owner_id, project_id, owner_id, project_id)
         with self._connect() as db:
             return [self._variant_row(row) for row in db.execute(sql, params).fetchall()]
+
+    def restore_variant(
+        self, owner_id: str, project_id: str, variant_id: str
+    ) -> VariantResponse:
+        """Restore historical content as a new draft version, preserving all history."""
+        historical = self.get_variant(owner_id, project_id, variant_id)
+        return self.create_variant(
+            owner_id=owner_id,
+            project_id=project_id,
+            format_id=historical.format.value,
+            content=historical.content,
+            generation_mode="history_restore",
+            status=VariantStatus.DRAFT,
+        )
 
     def revise_variant(
         self,
