@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.0] - 2026-08-01
+
+### Added
+- In-workspace editing for saved project source, target formats, voice, and guidance.
+- Explicit edit state with update and cancel actions, focus management, and recovery-oriented feedback.
+- TDD acceptance coverage proving project edits preserve existing generated variants.
+
+### Changed
+- Application and package versions synchronized to 1.4.0.
+
+
 ## [1.3.0] - 2026-08-01
 
 ### Added

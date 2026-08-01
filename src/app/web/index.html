@@ -29,8 +29,8 @@
     </dl>
   </section>
   <div class="workspace-grid">
-    <section class="panel" aria-labelledby="create-title">
-      <h2 id="create-title">Create content</h2>
+    <section class="panel" aria-labelledby="form-title">
+      <h2 id="form-title">Create content</h2>
       <section class="recipe-bar" aria-labelledby="recipes-title">
         <h3 id="recipes-title">Saved recipes</h3>
         <div class="recipe-controls">
@@ -58,7 +58,7 @@
         <label for="voice">Brand voice</label>
         <select id="voice" name="voice"><option value="professional">Professional</option><option value="friendly">Friendly</option><option value="casual">Casual</option><option value="authoritative">Authoritative</option><option value="technical">Technical</option></select>
         <details><summary>Optional guidance</summary><label for="instructions">Custom instructions</label><textarea id="instructions" maxlength="2000" rows="3"></textarea></details>
-        <div class="actions"><button class="primary" type="submit">Save project</button><button id="save-recipe" type="button">Save as recipe</button><button type="reset">Clear</button></div>
+        <div class="actions"><button id="save-project" class="primary" type="submit">Save project</button><button id="cancel-edit" type="button" hidden>Cancel edit</button><button id="save-recipe" type="button">Save as recipe</button><button type="reset">Clear</button></div>
       </form>
     </section>
     <section class="panel" aria-labelledby="recent-title">

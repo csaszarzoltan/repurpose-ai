@@ -404,3 +404,39 @@ def test_workspace_ui_exposes_duplicate_restore_and_fallback_attention(tmp_path,
     assert 'Restore this version' in script
     assert '/duplicate' in script
     assert '/restore' in script
+
+
+def test_workspace_exposes_project_edit_and_cancel_workflow(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    html = client.get('/').text
+    script = client.get('/assets/app.js').text
+    assert 'id="form-title"' in html
+    assert 'id="save-project"' in html
+    assert 'id="cancel-edit"' in html
+    assert 'Edit project' in script
+    assert "method:'PATCH'" in script
+    assert 'Editing' in script
+
+
+def test_project_edit_preserves_variants_and_updates_reusable_settings(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    project = _create_project(client)
+    generated = client.post(f'/api/v1/projects/{project["id"]}/generate').json()
+
+    response = client.patch(
+        f'/api/v1/projects/{project["id"]}',
+        json={
+            "title": "Updated source project",
+            "body": "Updated source body for the next generation.",
+            "target_formats": ["newsletter"],
+            "brand_voice": "authoritative",
+            "custom_instructions": "Use a concise executive summary.",
+        },
+    )
+    assert response.status_code == 200, response.text
+    updated = response.json()
+    assert updated["title"] == "Updated source project"
+    assert updated["target_formats"] == ["newsletter"]
+    assert updated["brand_voice"] == "authoritative"
+    existing = client.get(f'/api/v1/projects/{project["id"]}/variants').json()
+    assert {item["id"] for item in existing} == {item["id"] for item in generated["variants"]}
