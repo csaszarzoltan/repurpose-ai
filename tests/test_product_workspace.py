@@ -103,3 +103,70 @@ def test_production_workspace_requires_authentication(tmp_path, monkeypatch):
     client = TestClient(create_app())
     response = client.get("/api/v1/projects")
     assert response.status_code == 401
+
+
+def _create_project(client: TestClient) -> dict:
+    response = client.post(
+        "/api/v1/projects",
+        json={
+            "title": "Generate me",
+            "body": "A release note with clear user value.",
+            "source_format": "blog_post",
+            "target_formats": ["linkedin_post", "twitter_thread"],
+            "brand_voice": "friendly",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_generate_project_persists_format_variants_and_versions(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    project = _create_project(client)
+
+    generated = client.post(f'/api/v1/projects/{project["id"]}/generate')
+    assert generated.status_code == 201, generated.text
+    result = generated.json()
+    assert result["generation_mode"] == "template_fallback"
+    assert result["warning"]
+    assert {item["format"] for item in result["variants"]} == {"linkedin_post", "twitter_thread"}
+    assert all(item["version"] == 1 for item in result["variants"])
+
+    second = client.post(f'/api/v1/projects/{project["id"]}/generate').json()
+    assert all(item["version"] == 2 for item in second["variants"])
+
+    latest = client.get(f'/api/v1/projects/{project["id"]}/variants').json()
+    assert len(latest) == 2
+    assert all(item["version"] == 2 for item in latest)
+
+    history = client.get(f'/api/v1/projects/{project["id"]}/variants?include_history=true').json()
+    assert len(history) == 4
+
+
+def test_update_variant_creates_new_version_without_overwriting_prior_work(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    project = _create_project(client)
+    variant = client.post(f'/api/v1/projects/{project["id"]}/generate').json()["variants"][0]
+
+    changed = client.patch(
+        f'/api/v1/projects/{project["id"]}/variants/{variant["id"]}',
+        json={"content": "A manually reviewed and approved draft.", "status": "approved"},
+    )
+    assert changed.status_code == 200
+    assert changed.json()["version"] == 2
+    assert changed.json()["status"] == "approved"
+
+    history = client.get(
+        f'/api/v1/projects/{project["id"]}/variants?include_history=true'
+    ).json()
+    same_format = [item for item in history if item["format"] == variant["format"]]
+    assert [item["version"] for item in same_format] == [2, 1]
+    assert same_format[1]["content"] != same_format[0]["content"]
+
+
+def test_workspace_exposes_generation_and_variant_feedback(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    html = client.get("/").text
+    assert "Generate drafts" in html
+    assert 'id="variants"' in html
+    assert "Generated drafts use template fallback" in html

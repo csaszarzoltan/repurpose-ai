@@ -82,3 +82,40 @@ class TelemetryEvent(BaseModel):
         if len(value) > 20:
             raise ValueError("at most 20 telemetry properties are allowed")
         return value
+
+class VariantStatus(StrEnum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class VariantUpdate(BaseModel):
+    content: str = Field(min_length=1, max_length=100_000)
+    status: VariantStatus = VariantStatus.DRAFT
+
+    @field_validator("content")
+    @classmethod
+    def content_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+
+class VariantResponse(BaseModel):
+    id: str
+    project_id: str
+    owner_id: str
+    format: ContentFormat
+    content: str
+    version: int
+    status: VariantStatus
+    generation_mode: str
+    created_at: datetime
+
+
+class GenerationResponse(BaseModel):
+    project_id: str
+    generation_mode: str
+    warning: str | None = None
+    variants: list[VariantResponse]

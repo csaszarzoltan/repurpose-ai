@@ -37,3 +37,29 @@ All checks passed!
 ```
 
 Command scope: project workspace API, UI route, models, SQLite store, offline token fallback, and new acceptance tests. The inherited codebase still contains pre-existing lint/deprecation debt outside this changed-file scope, documented in the implementation report.
+
+# v0.9.0 Continuation Validation
+
+## TDD red phase
+
+Three acceptance tests were added first and failed as expected: generation endpoint missing, variant revision/history missing, and generation controls absent from the workspace.
+
+## New workspace suite
+
+```text
+9 passed
+```
+
+## Full regression after v0.9.0
+
+```text
+1201 passed, 2 skipped, 10 xfailed
+```
+
+No test failed. The xfails remain pre-existing planned-feature markers.
+
+## Changed-file static validation
+
+```text
+All checks passed!
+```

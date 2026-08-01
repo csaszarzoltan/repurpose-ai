@@ -8,7 +8,15 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from app.models.project import ProjectCreate, ProjectResponse, ProjectStatus, ProjectUpdate, TelemetryEvent
+from app.models.project import (
+    ProjectCreate,
+    ProjectResponse,
+    ProjectStatus,
+    ProjectUpdate,
+    TelemetryEvent,
+    VariantResponse,
+    VariantStatus,
+)
 
 
 def _now() -> str:
@@ -55,6 +63,22 @@ class ProjectStore:
                     properties TEXT NOT NULL,
                     occurred_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS content_variants (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    owner_id TEXT NOT NULL,
+                    format TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    generation_mode TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(project_id) REFERENCES content_projects(id)
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_variant_version
+                    ON content_variants(project_id, format, version);
+                CREATE INDEX IF NOT EXISTS ix_variants_project_created
+                    ON content_variants(owner_id, project_id, created_at DESC);
                 """
             )
 
@@ -132,3 +156,86 @@ class ProjectStore:
                 "INSERT INTO telemetry_events VALUES (?, ?, ?, ?, ?)",
                 (str(uuid.uuid4()), owner_id, event.event_name, json.dumps(event.properties), event.occurred_at.isoformat()),
             )
+
+
+    @staticmethod
+    def _variant_row(row: sqlite3.Row) -> VariantResponse:
+        return VariantResponse.model_validate(dict(row))
+
+    def create_variant(
+        self,
+        owner_id: str,
+        project_id: str,
+        format_id: str,
+        content: str,
+        generation_mode: str,
+        status: VariantStatus = VariantStatus.DRAFT,
+    ) -> VariantResponse:
+        self.get(owner_id, project_id)
+        with self._connect() as db:
+            current = db.execute(
+                "SELECT COALESCE(MAX(version), 0) FROM content_variants "
+                "WHERE owner_id = ? AND project_id = ? AND format = ?",
+                (owner_id, project_id, format_id),
+            ).fetchone()[0]
+            variant_id, created_at = str(uuid.uuid4()), _now()
+            db.execute(
+                """INSERT INTO content_variants
+                (id, project_id, owner_id, format, content, version, status, generation_mode, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    variant_id, project_id, owner_id, format_id, content,
+                    current + 1, status.value, generation_mode, created_at,
+                ),
+            )
+            row = db.execute("SELECT * FROM content_variants WHERE id = ?", (variant_id,)).fetchone()
+        return self._variant_row(row)
+
+    def get_variant(self, owner_id: str, project_id: str, variant_id: str) -> VariantResponse:
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT * FROM content_variants WHERE owner_id = ? AND project_id = ? AND id = ?",
+                (owner_id, project_id, variant_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(variant_id)
+        return self._variant_row(row)
+
+    def list_variants(
+        self, owner_id: str, project_id: str, include_history: bool = False
+    ) -> list[VariantResponse]:
+        self.get(owner_id, project_id)
+        if include_history:
+            sql = (
+                "SELECT * FROM content_variants WHERE owner_id = ? AND project_id = ? "
+                "ORDER BY format, version DESC"
+            )
+            params = (owner_id, project_id)
+        else:
+            sql = """SELECT v.* FROM content_variants v
+                JOIN (
+                    SELECT format, MAX(version) AS version FROM content_variants
+                    WHERE owner_id = ? AND project_id = ? GROUP BY format
+                ) latest ON latest.format = v.format AND latest.version = v.version
+                WHERE v.owner_id = ? AND v.project_id = ? ORDER BY v.format"""
+            params = (owner_id, project_id, owner_id, project_id)
+        with self._connect() as db:
+            return [self._variant_row(row) for row in db.execute(sql, params).fetchall()]
+
+    def revise_variant(
+        self,
+        owner_id: str,
+        project_id: str,
+        variant_id: str,
+        content: str,
+        status: VariantStatus,
+    ) -> VariantResponse:
+        previous = self.get_variant(owner_id, project_id, variant_id)
+        return self.create_variant(
+            owner_id=owner_id,
+            project_id=project_id,
+            format_id=previous.format.value,
+            content=content,
+            generation_mode="manual_edit",
+            status=status,
+        )

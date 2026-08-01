@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.0] - 2026-08-01
+
+### Added
+- Generate-drafts action directly from each saved content project.
+- Durable generated variants with per-format version history.
+- Non-destructive manual revisions and explicit draft/approved/rejected status.
+- Workspace controls to view, edit, save, approve, and copy generated variants.
+- Honest `template_fallback` generation metadata and visible review warning when no LLM router is configured.
+- Acceptance tests for generation, history, non-destructive editing, and UI feedback.
+
+### Changed
+- Workspace now supports the repeated save → generate → review → approve journey.
+- Application and package versions synchronized to 0.9.0.
+
+
 ## [0.8.0] - 2026-08-01
 
 ### Added

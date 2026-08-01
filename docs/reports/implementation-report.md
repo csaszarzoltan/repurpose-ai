@@ -1,10 +1,10 @@
-# RepurposeAI v0.8.0 Implementation Report
+# RepurposeAI v0.9.0 Implementation Report
 
 ## 1. Product understanding
 
 ### Confirmed observations
 
-RepurposeAI is a FastAPI content-repurposing backend with 20 output formats, multiple LLM providers, brand voice controls, batch and workflow automation, publishing adapters, authentication, API keys, subscriptions, and analytics scaffolding. Before v0.8.0, its practical user interface was OpenAPI/Swagger. Most workflow, credential, job, and analytics state was held in process memory, while several analytics and export routes returned sample or scaffold responses.
+RepurposeAI is a FastAPI content-repurposing backend with 20 output formats, multiple LLM providers, brand voice controls, batch and workflow automation, publishing adapters, authentication, API keys, subscriptions, and analytics scaffolding. Before v0.9.0, its practical user interface was OpenAPI/Swagger. Most workflow, credential, job, and analytics state was held in process memory, while several analytics and export routes returned sample or scaffold responses.
 
 ### Reasonable inferences
 
@@ -134,4 +134,11 @@ uvicorn app.main:app --reload
 
 Open `http://localhost:8000/` for the workspace and `/docs` for the API.
 
-For production, set `ENVIRONMENT=production`; workspace APIs then require a valid JWT. Mount `REPURPOSEAI_DATA_DIR` on persistent storage. Version 0.8.0 creates `repurposeai.sqlite3` automatically. No destructive migration is performed against previous in-memory data because that data was not durable.
+For production, set `ENVIRONMENT=production`; workspace APIs then require a valid JWT. Mount `REPURPOSEAI_DATA_DIR` on persistent storage. Version 0.9.0 creates `repurposeai.sqlite3` automatically. No destructive migration is performed against previous in-memory data because that data was not durable.
+
+
+## v0.9.0 continuation
+
+The second TDD increment closed the most important gap left by v0.8.0: saved sources can now produce persistent per-format drafts in the same workspace. Every generation creates one new version per format. Manual edits and approval create a new immutable version rather than overwriting prior work. The interface exposes Generate drafts, View drafts, Save revision, Approve, and Copy actions with live status feedback.
+
+Because the legacy service uses a non-LLM fallback when no router is configured, the API and UI explicitly label the mode as `template_fallback` and show a review warning. This prevents users from confusing deterministic fallback content with configured AI output.

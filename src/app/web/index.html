@@ -19,7 +19,7 @@
   <section class="hero" aria-labelledby="page-title">
     <p class="eyebrow">Content workspace</p>
     <h1 id="page-title">Create once. Reuse everywhere.</h1>
-    <p>Save the source, choose your everyday formats, and resume work without rebuilding requests.</p>
+    <p>Save the source, choose your everyday formats, generate drafts, and resume work without rebuilding requests.</p>
   </section>
   <div class="workspace-grid">
     <section class="panel" aria-labelledby="create-title">
@@ -46,10 +46,15 @@
       </form>
     </section>
     <section class="panel" aria-labelledby="recent-title">
-      <div class="section-heading"><div><h2 id="recent-title">Recent projects</h2><p>Pick up where you left off.</p></div><button id="refresh" type="button">Refresh</button></div>
+      <div class="section-heading"><div><h2 id="recent-title">Recent projects</h2><p>Pick up where you left off, then choose Generate drafts.</p></div><button id="refresh" type="button">Refresh</button></div>
       <div id="status" role="status" aria-live="polite"></div>
       <ul id="projects" class="project-list" aria-label="Saved content projects"></ul>
       <div id="empty" class="empty"><h3>No saved projects yet</h3><p>Your first saved source will appear here.</p></div>
+      <section id="variant-section" hidden aria-labelledby="variants-title">
+        <h2 id="variants-title">Generated drafts</h2>
+        <p class="notice">Generated drafts use template fallback when no LLM router is configured. Review before publishing.</p>
+        <div id="variants"></div>
+      </section>
     </section>
   </div>
 </main>

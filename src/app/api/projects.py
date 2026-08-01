@@ -7,8 +7,18 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 
 from app.dependencies import get_optional_user
-from app.models.project import ProjectCreate, ProjectResponse, ProjectUpdate, TelemetryEvent
+from app.models.content import ContentItem
+from app.models.project import (
+    GenerationResponse,
+    ProjectCreate,
+    ProjectResponse,
+    ProjectUpdate,
+    TelemetryEvent,
+    VariantResponse,
+    VariantUpdate,
+)
 from app.services.project_store import ProjectStore
+from app.services.repurpose import RepurposeService
 
 if TYPE_CHECKING:
     from app.models.auth import UserResponse
@@ -108,3 +118,95 @@ async def record_telemetry(
 ) -> dict[str, str]:
     _store().record_event(_owner(user, x_workspace_id), event)
     return {"status": "accepted"}
+
+
+@router.post("/projects/{project_id}/generate", response_model=GenerationResponse, status_code=201)
+async def generate_project_variants(
+    project_id: str,
+    user: UserResponse | None = Depends(get_optional_user),
+    x_workspace_id: str | None = Header(default=None),
+) -> GenerationResponse:
+    owner = _owner(user, x_workspace_id)
+    store = _store()
+    try:
+        project = store.get(owner, project_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Project not found") from None
+
+    content = ContentItem(
+        id=project.id,
+        title=project.title,
+        body=project.body,
+        source_format=project.source_format,
+    )
+    result = await RepurposeService(user=user).repurpose(
+        content=content,
+        target_formats=project.target_formats,
+        brand_voice=project.brand_voice,
+        custom_instructions=project.custom_instructions,
+    )
+    generation_mode = "template_fallback"
+    warning = (
+        "Generated drafts use template fallback because no configured LLM router "
+        "is available in this workspace. Review every draft before publishing."
+    )
+    variants = [
+        store.create_variant(
+            owner_id=owner,
+            project_id=project.id,
+            format_id=format_id.value,
+            content=generated,
+            generation_mode=generation_mode,
+        )
+        for format_id, generated in result.repurposed.items()
+    ]
+    store.record_event(
+        owner,
+        TelemetryEvent(
+            event_name="generation_started",
+            properties={"format_count": len(variants), "generation_mode": generation_mode},
+        ),
+    )
+    return GenerationResponse(
+        project_id=project.id,
+        generation_mode=generation_mode,
+        warning=warning,
+        variants=variants,
+    )
+
+
+@router.get("/projects/{project_id}/variants", response_model=list[VariantResponse])
+async def list_project_variants(
+    project_id: str,
+    include_history: bool = False,
+    user: UserResponse | None = Depends(get_optional_user),
+    x_workspace_id: str | None = Header(default=None),
+) -> list[VariantResponse]:
+    try:
+        return _store().list_variants(
+            _owner(user, x_workspace_id), project_id, include_history=include_history
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Project not found") from None
+
+
+@router.patch(
+    "/projects/{project_id}/variants/{variant_id}", response_model=VariantResponse
+)
+async def revise_project_variant(
+    project_id: str,
+    variant_id: str,
+    payload: VariantUpdate,
+    user: UserResponse | None = Depends(get_optional_user),
+    x_workspace_id: str | None = Header(default=None),
+) -> VariantResponse:
+    try:
+        return _store().revise_variant(
+            owner_id=_owner(user, x_workspace_id),
+            project_id=project_id,
+            variant_id=variant_id,
+            content=payload.content,
+            status=payload.status,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Variant not found") from None
