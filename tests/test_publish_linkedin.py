@@ -165,19 +165,17 @@ class TestLinkedInPublisherAuthRetry:
             )
 
         with respx.mock:
-            # First attempt — 401
-            respx.post(f"{LINKEDIN_API}/rest/posts").respond(
-                status_code=401,
-                json={"message": "Invalid access token"},
+            # One route with sequential responses is compatible with current
+            # respx releases; duplicate route registration replaces the first.
+            respx.post(f"{LINKEDIN_API}/rest/posts").mock(
+                side_effect=[
+                    httpx.Response(401, json={"message": "Invalid access token"}),
+                    httpx.Response(201, json={"id": "urn:li:activity:retried"}),
+                ]
             )
             # Token refresh endpoint
             respx.post("https://www.linkedin.com/oauth/v2/accessToken").mock(
                 side_effect=_refresh_handler,
-            )
-            # Retry after refresh — success
-            respx.post(f"{LINKEDIN_API}/rest/posts").respond(
-                status_code=201,
-                json={"id": "urn:li:activity:retried"},
             )
 
             result = await publisher.create_post(

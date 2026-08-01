@@ -1,3 +1,2 @@
 """Application constants."""
-
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.8.0"

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 from app.services.llm.base import BaseLLMProvider, LLMResponse
 
@@ -77,11 +78,13 @@ class OpenAIProvider(BaseLLMProvider):
 
             enc = tiktoken.get_encoding("cl100k_base")
             return len(enc.encode(text))
-        except ImportError:
-            logger.debug("tiktoken not available, using heuristic fallback")
+        except Exception as exc:
+            logger.debug("tiktoken unavailable (%s), using deterministic heuristic fallback", exc)
             if not text:
                 return 0
-            return max(1, len(text) // 4)
+            # Offline-safe lexical approximation. Unlike the old character/4
+            # estimate, this respects word and punctuation boundaries.
+            return len(re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE))
 
     def get_context_window(self, model: str | None = None) -> int:
         """Return the context window for the given model."""

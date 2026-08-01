@@ -29,3 +29,9 @@ htmlcov/
 # Environment
 .env
 .env.local
+
+# Local persistent workspace data
+data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm

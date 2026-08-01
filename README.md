@@ -1,5 +1,20 @@
 # RepurposeAI
 
+> **v0.8.0:** RepurposeAI now includes a responsive content workspace at `/`, durable SQLite project storage, accessible form/status behavior, production authentication enforcement for workspace data, privacy-safe telemetry, and a truthful capability manifest. The existing API remains available at `/docs`.
+
+## User workspace quick start
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -e ".[dev]"
+export REPURPOSEAI_DATA_DIR=./data
+uvicorn app.main:app --reload
+```
+
+Open `http://localhost:8000/` to create and resume projects. In production, set `ENVIRONMENT=production`; project and telemetry routes then require JWT authentication. See [`docs/v0.8.0-workspace.md`](docs/v0.8.0-workspace.md) and [`docs/reports/implementation-report.md`](docs/reports/implementation-report.md).
+
+
 AI-powered content repurposing tool that transforms one piece of content into 20+ platform-optimized formats, powered by multi-provider LLM support (OpenAI, Anthropic, OpenRouter).
 
 [![Deployed on Railway](https://img.shields.io/badge/Deployed-Railway-1B2A4A?logo=railway)](https://repurposeai-production-d688.up.railway.app)

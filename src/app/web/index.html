@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Create, save and resume platform-ready content projects.">
+  <title>RepurposeAI Workspace</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="app-header">
+  <a class="brand" href="/" aria-label="RepurposeAI home">RepurposeAI</a>
+  <nav aria-label="Primary navigation">
+    <a aria-current="page" href="/">Create</a><a href="/docs">API docs</a>
+  </nav>
+</header>
+<main id="main-content" tabindex="-1">
+  <section class="hero" aria-labelledby="page-title">
+    <p class="eyebrow">Content workspace</p>
+    <h1 id="page-title">Create once. Reuse everywhere.</h1>
+    <p>Save the source, choose your everyday formats, and resume work without rebuilding requests.</p>
+  </section>
+  <div class="workspace-grid">
+    <section class="panel" aria-labelledby="create-title">
+      <h2 id="create-title">Create content</h2>
+      <form id="project-form" novalidate>
+        <label for="title">Project title <span aria-hidden="true">*</span></label>
+        <input id="title" name="title" required maxlength="200" autocomplete="off" aria-describedby="title-help title-error">
+        <p class="hint" id="title-help">Use a name you can recognize later.</p><p class="error" id="title-error"></p>
+        <label for="body">Source content <span aria-hidden="true">*</span></label>
+        <textarea id="body" name="body" required maxlength="100000" rows="10" aria-describedby="body-help body-error"></textarea>
+        <p class="hint" id="body-help">Paste the article, transcript, update, or notes you want to reuse.</p><p class="error" id="body-error"></p>
+        <fieldset><legend>Where should it go? <span aria-hidden="true">*</span></legend>
+          <div class="choice-grid">
+            <label><input type="checkbox" name="formats" value="linkedin_post" checked> LinkedIn post</label>
+            <label><input type="checkbox" name="formats" value="twitter_thread"> X thread</label>
+            <label><input type="checkbox" name="formats" value="newsletter"> Newsletter</label>
+            <label><input type="checkbox" name="formats" value="blog_post"> Blog post</label>
+          </div><p class="error" id="formats-error"></p>
+        </fieldset>
+        <label for="voice">Brand voice</label>
+        <select id="voice" name="voice"><option value="professional">Professional</option><option value="friendly">Friendly</option><option value="casual">Casual</option><option value="authoritative">Authoritative</option><option value="technical">Technical</option></select>
+        <details><summary>Optional guidance</summary><label for="instructions">Custom instructions</label><textarea id="instructions" maxlength="2000" rows="3"></textarea></details>
+        <div class="actions"><button class="primary" type="submit">Save project</button><button type="reset">Clear</button></div>
+      </form>
+    </section>
+    <section class="panel" aria-labelledby="recent-title">
+      <div class="section-heading"><div><h2 id="recent-title">Recent projects</h2><p>Pick up where you left off.</p></div><button id="refresh" type="button">Refresh</button></div>
+      <div id="status" role="status" aria-live="polite"></div>
+      <ul id="projects" class="project-list" aria-label="Saved content projects"></ul>
+      <div id="empty" class="empty"><h3>No saved projects yet</h3><p>Your first saved source will appear here.</p></div>
+    </section>
+  </div>
+</main>
+<script src="/assets/app.js" defer></script>
+</body>
+</html>

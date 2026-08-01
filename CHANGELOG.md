@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.0] - 2026-08-01
+
+### Added
+- Responsive, accessible content workspace at `/` with clear create, recent, loading, empty, success, and failure states.
+- Durable SQLite-backed content projects with create, list, search, read, update, and archive APIs.
+- Production authentication enforcement for project and telemetry data; convenient local workspace behavior for development/test.
+- Privacy-safe allowlisted telemetry that rejects content and credential fields.
+- Capability manifest on `/health` distinguishing available features from scaffolds.
+- TDD acceptance coverage for the workspace, persistence, validation, accessibility semantics, privacy, and production access.
+- Full product/UX requirements and implementation reports under `docs/reports/`.
+
+### Changed
+- Application and package version synchronized to 0.8.0.
+- Offline token counting now falls back safely when tiktoken resources cannot be downloaded.
+- README and setup documentation updated for the user workspace and persistent data directory.
+
+
 All notable changes to RepurposeAI will be documented in this file.
 
 ## [0.7.0] - 2026-07-30

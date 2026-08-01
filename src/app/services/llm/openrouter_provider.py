@@ -74,7 +74,7 @@ class OpenRouterProvider(BaseLLMProvider):
 
             enc = tiktoken.get_encoding("cl100k_base")
             return len(enc.encode(text))
-        except ImportError:
+        except Exception:
             logger.debug("tiktoken not available, using heuristic fallback")
             if not text:
                 return 0
