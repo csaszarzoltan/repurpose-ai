@@ -94,7 +94,10 @@ def test_health_exposes_capabilities_without_claiming_stubs(tmp_path, monkeypatc
     data = client.get("/health").json()
     assert data["status"] == "ok"
     assert data["capabilities"]["content_workspace"] == "available"
-    assert data["capabilities"]["pdf_export"] == "scaffold"
+    # Forward regression (analytics real-data chain, v1.6.0): PDF export was a
+    # file-path stub when this test was written; it now emits real %PDF-1.4
+    # artifacts (test_analytics_export.py), so "available" is the truthful flag.
+    assert data["capabilities"]["pdf_export"] == "available"
 
 
 def test_production_workspace_requires_authentication(tmp_path, monkeypatch):
