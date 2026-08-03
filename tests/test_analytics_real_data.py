@@ -530,3 +530,52 @@ class TestRouterIsNotAFacade:
             "analytics.py still contains the hardcoded PostMetrics(reach=1000, ...) "
             "facade return — endpoints must build responses from repository data."
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Malformed from_date/to_date params — must 422, never 500 (review finding B1)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.xfail(not HAS_ROUTER or not HAS_REPOSITORY, reason="analytics API/repository not implemented yet")
+class TestMalformedDateParamsReturn422:
+    """Malformed from_date/to_date must yield 422, never an unhandled 500.
+
+    Regression for tech-lead review finding B1 (t_babe742e): every endpoint
+    that accepts from_date/to_date funnels through ``_parse_date``, which used
+    to let ``datetime.fromisoformat``'s ValueError escape as HTTP 500.
+    """
+
+    async def _assert_422(self, path: str, query: str) -> None:
+        async with await _client(await _build_seeded_store()) as client:
+            resp = await client.get(f"/api/v1/analytics{path}?{query}")
+        assert resp.status_code == 422, (
+            f"GET {path}?{query} must return 422 for malformed dates; got "
+            f"{resp.status_code} — _parse_date is leaking ValueError as a 500"
+        )
+
+    async def test_summary_rejects_garbage_from_date(self):
+        await self._assert_422("/summary", "from_date=garbage")
+
+    async def test_summary_rejects_garbage_to_date(self):
+        await self._assert_422("/summary", "to_date=notadate")
+
+    async def test_summary_rejects_impossible_date(self):
+        await self._assert_422("/summary", "from_date=2026-13-99")
+
+    async def test_trends_summary_rejects_garbage_to_date(self):
+        await self._assert_422("/trends/summary", "to_date=notadate")
+
+    async def test_trends_top_content_rejects_garbage_from_date(self):
+        await self._assert_422("/trends/top-content", "from_date=x")
+
+    async def test_trends_metric_rejects_impossible_date(self):
+        await self._assert_422("/trends/reach", "from_date=2026-13-99")
+
+    async def test_control_summary_without_dates_stays_200(self):
+        async with await _client(await _build_seeded_store()) as client:
+            resp = await client.get("/api/v1/analytics/summary")
+        assert resp.status_code == 200, (
+            "control: GET /summary with no date params must stay 200; got "
+            f"{resp.status_code}"
+        )

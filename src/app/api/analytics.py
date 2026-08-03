@@ -48,7 +48,16 @@ def _parse_date(value: str | None) -> datetime | None:
     """
     if not value:
         return None
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Invalid date format: expected ISO 8601 "
+                "(e.g. 2026-07-01 or 2026-07-01T00:00:00Z)"
+            ),
+        ) from None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed
