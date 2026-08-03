@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.6.0] - 2026-08-03
+
+### Added
+- Real-data analytics pipeline: every `/api/v1/analytics` endpoint now derives its responses from SQLite-backed repositories (metrics, validation reports, optimization scores) instead of a facade — what is stored is what the API returns.
+- Next.js analytics dashboard UI (`frontend/`): summary cards, daily performance-trend chart with metric switcher, top-content ranking, live optimization-score panel, validation-gaps panel, and a CSV/PDF export dialog with platform filtering.
+- Real one-page PDF analytics reports (previously a file-path stub) and real CSV export payloads with a `date` header column.
+- Demo seed helper `scripts/seed_analytics_demo.py` for exercising the dashboard end-to-end against deterministic seeded data.
+- 7 new regression tests for malformed date parameters, and a 4-test frontend build/typecheck gate.
+
+### Fixed
+- Malformed `from_date`/`to_date` query parameters previously caused unhandled 500s on the summary and trend endpoints; they now return 422 Unprocessable Entity with a descriptive message, enforced at a single parse chokepoint.
+
+### Documentation
+- Rewrote `docs/analytics.md` for the real-data implementation: architecture and data flow, SQLite data store, verified scoring/validation/export/trend examples, dashboard UI, local setup/run instructions, and a full API reference with request/response bodies.
+- Updated the README analytics section: dashboard UI, module table, real CSV/PDF export, and a verified quick-start against the local seeded backend.
+
+### Tests
+- Analytics suite: 309 tests across 9 `test_analytics_*` modules (data store 39, models 58, services 50, trends 33, validation 31, real data 28, export 26, performance 25, scoring 19) plus 4 `test_frontend_gate` tests.
+- Full suite: 1299 passed, 2 skipped, 10 xfailed.
+
+
 ## [1.5.0] - 2026-08-01
 
 ### Added

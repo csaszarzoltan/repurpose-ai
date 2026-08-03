@@ -1,6 +1,6 @@
 # RepurposeAI
 
-> **v1.3.0:** RepurposeAI now includes a responsive content workspace at `/`, reusable saved recipes for frequent workflows, configured OpenRouter/OpenAI/Anthropic generation, honest fallback reporting, durable project and variant history, review controls, production authentication enforcement, and privacy-safe telemetry. The existing API remains available at `/docs`.
+> **v1.6.0:** RepurposeAI now ships a real-data analytics dashboard: SQLite-backed content performance tracking, platform optimization scoring, validation gap analysis, real CSV/PDF export, and trend visualization — served by a Next.js dashboard UI and a fully documented `/api/v1/analytics` API. The responsive content workspace remains at `/`, and the API is available at `/docs`.
 
 ## User workspace quick start
 
@@ -43,11 +43,12 @@ AI-powered content repurposing tool that transforms one piece of content into 20
 - **Per-platform rate limiting** — configurable token-bucket with automatic back-pressure
 - **Dry-run mode** — validate publish requests without posting
 - **Publish job tracking** — query publish status by job ID
-- **Analytics Dashboard** — content performance tracking, optimization scoring, and trend visualization
+- **Analytics Dashboard** — real-data content performance tracking, optimization scoring, and trend visualization
 - **Validation Gap Analyzer** — readability analysis (Flesch-Kincaid, Dale-Chall, ARI), diff blocks, tone consistency, faithfulness scoring, and LLM-based quality judging
 - **Platform Optimization Scoring** — deterministic 0–100 algorithm-readiness score per platform
-- **CSV & PDF Export** — scheduled analytics exports with in-memory schedule management
+- **CSV & PDF Export** — real CSV and one-page PDF analytics reports with schedule management
 - **Trend Visualization** — period-over-period delta computation, top content ranking, per-metric time-series trends
+- **Next.js Analytics Dashboard UI** — summary cards, trend chart, top-content ranking, optimization-score and validation-gaps panels, CSV/PDF export dialog
 
 ## Tech Stack
 
@@ -57,6 +58,7 @@ AI-powered content repurposing tool that transforms one piece of content into 20
 - OpenAI SDK (OpenAI + OpenRouter providers)
 - Anthropic SDK (Claude provider)
 - tiktoken for token counting
+- Next.js 14 / React 18 / Tailwind CSS for the analytics dashboard UI
 - Railway for cloud hosting
 - Stripe for billing (integration scaffold)
 
@@ -605,7 +607,11 @@ Rate limits are configurable via the `max_calls` and `period` parameters on the 
 
 ## Analytics Dashboard
 
-Track content performance, compute optimization scores, validate AI-generated content, export reports, and visualize trends. All endpoints are under `/api/v1/analytics`.
+Track content performance, compute optimization scores, validate AI-generated content, export real CSV/PDF reports, and visualize trends. The analytics feature is a **real data pipeline** — the API derives every response from SQLite-backed repositories (no facade, no mock data), and a **Next.js dashboard UI** (`frontend/`) renders it. All endpoints are under `/api/v1/analytics`; see [`docs/analytics.md`](docs/analytics.md) for the full guide.
+
+### Dashboard UI
+
+The Next.js dashboard (`frontend/`, React 18 + Tailwind CSS) displays live API data: summary cards (reach, impressions, engagement), a daily performance-trend chart with metric switcher (reach / impressions / engagement rate), a top-content ranking, an optimization-score panel (0–100, computed live), a validation-gaps panel (quality delta, readability, faithfulness, LLM coherence), and a CSV/PDF export dialog with platform filtering. Platform filtering is applied client-side over the real fetched posts.
 
 ### Analytics API Endpoints
 
@@ -613,13 +619,13 @@ Track content performance, compute optimization scores, validate AI-generated co
 |----------|--------|-------------|
 | `/api/v1/analytics/posts` | GET | List all tracked posts with metrics |
 | `/api/v1/analytics/posts/{post_id}` | GET | Get detailed metrics for a specific post |
-| `/api/v1/analytics/summary` | GET | Aggregate summary over a date range |
+| `/api/v1/analytics/summary` | GET | Aggregate summary over a date range (`from_date`/`to_date`) |
 | `/api/v1/analytics/optimization-score/calculate` | POST | Calculate 0–100 algorithm-readiness score |
 | `/api/v1/analytics/optimization-score/{post_id}` | GET | Get stored optimization score for a post |
 | `/api/v1/analytics/validate` | POST | Validate AI-generated content vs published |
 | `/api/v1/analytics/validation/{job_id}` | GET | Get validation report by job ID |
 | `/api/v1/analytics/export/csv` | POST | Export analytics data as CSV |
-| `/api/v1/analytics/export/pdf` | POST | Export analytics report as PDF |
+| `/api/v1/analytics/export/pdf` | POST | Export analytics report as one-page PDF |
 | `/api/v1/analytics/export/schedule` | POST | Create a scheduled export |
 | `/api/v1/analytics/export/schedule/{schedule_id}` | DELETE | Delete an export schedule |
 | `/api/v1/analytics/export/{export_id}` | GET | Get export status by ID |
@@ -627,43 +633,66 @@ Track content performance, compute optimization scores, validate AI-generated co
 | `/api/v1/analytics/trends/summary` | GET | Summary of all trend metrics |
 | `/api/v1/analytics/trends/top-content` | GET | Top-performing content across all platforms |
 
+Malformed `from_date`/`to_date` values return **422** with a descriptive message; unknown posts, scores, and validation jobs return **404**.
+
 ### Analytics Modules
 
 The dashboard is organized into 7 internal modules (see `docs/analytics.md` for full guide):
 
 | Module | Priority | Service | Description |
 |--------|----------|---------|-------------|
-| P0.1 | Data Store | `DatabaseConnection`, `MetricsRepository`, `ValidationRepository`, `ScoreRepository`, `Migrator` | Connection lifecycle, versioned schema migrations, in-memory CRUD |
+| P0.1 | Data Store | `MetricsRepository`, `ValidationRepository`, `ScoreRepository` | SQLite-backed persistence (`analytics_metrics`, `analytics_validations`, `analytics_scores`) |
 | P0.2 | Content Performance | `MetricsCollector` | Fetch and normalise per-post metrics (engagement, completion, share, growth rates) |
 | P1.1 | Optimization Scoring | `ScoreCalculator` | Deterministic 0–100 scoring per platform with weighted signal contributions |
 | P1.2 | Validation Gap Analyzer | `ValidationAnalyzer` | Readability (Flesch-Kincaid, Dale-Chall, ARI), diff blocks (difflib), tone consistency, faithfulness, LLM quality judge |
-| P1.3 | CSV Export | `ExportService` | CSV generation with headers, schedule management (create/delete/list) |
-| P2.1 | PDF Export | `ExportService` | PDF file path stubs, schedule management, export status tracking |
+| P1.3 | CSV Export | `ExportService` | Real CSV generation with headers, schedule management (create/delete) |
+| P2.1 | PDF Export | `ExportService` | Real one-page PDF reports, schedule management, export status tracking |
 | P2.2 | Trend Visualization | `TrendService` | Period-over-period delta, top content ranking, per-metric time-series |
 
 ### Analytics Quick-Start
 
+The analytics repositories are in-process singletons, so a plain `uvicorn` start has an **empty** store. Use the demo seed to exercise the dashboard end-to-end:
+
+```bash
+# 1. Start the backend with seeded demo data (18 posts across Twitter/LinkedIn/Medium)
+PYTHONPATH=src .venv/bin/python scripts/seed_analytics_demo.py --port 8000
+
+# 2. In a second terminal, start the dashboard UI
+cd frontend
+npm install
+NEXT_PUBLIC_API_BASE=http://localhost:8000/api/v1/analytics npm run dev
+# → open http://localhost:3000
+```
+
+Direct API calls against the local backend:
+
 ```bash
 # List tracked posts
-curl https://repurposeai-production-d688.up.railway.app/api/v1/analytics/posts
+curl http://localhost:8000/api/v1/analytics/posts
 
 # Get aggregate summary
-curl https://repurposeai-production-d688.up.railway.app/api/v1/analytics/summary
+curl "http://localhost:8000/api/v1/analytics/summary?from_date=2026-07-01&to_date=2026-08-01"
 
 # Calculate optimization score
-curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/analytics/optimization-score/calculate
+curl -X POST http://localhost:8000/api/v1/analytics/optimization-score/calculate \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "linkedin", "metrics": {"engagement_rate": 0.05, "completion_rate": 0.8, "share_rate": 0.02}}'
 
 # Validate content
-curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/analytics/validate
+curl -X POST http://localhost:8000/api/v1/analytics/validate \
+  -H "Content-Type: application/json" \
+  -d '{"draft": "The quick brown fox jumps over the lazy dog.", "published": "The quick brown fox leaps over the sleepy dog."}'
 
 # Export as CSV
-curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/analytics/export/csv
+curl -X POST http://localhost:8000/api/v1/analytics/export/csv \
+  -H "Content-Type: application/json" \
+  -d '{"metric_selection": ["reach", "engagement_rate"]}'
 
 # Get trend data for engagement_rate
-curl https://repurposeai-production-d688.up.railway.app/api/v1/analytics/trends/engagement_rate
+curl "http://localhost:8000/api/v1/analytics/trends/engagement_rate"
 
 # Get top-performing content
-curl https://repurposeai-production-d688.up.railway.app/api/v1/analytics/trends/top-content
+curl "http://localhost:8000/api/v1/analytics/trends/top-content?metric=reach&limit=8"
 ```
 
 ## All 20 Content Formats
