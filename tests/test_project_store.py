@@ -18,7 +18,6 @@ from app.services.project_store import (
     _update_assignments,
 )
 
-
 # ─── allowlist helper ───────────────────────────────────────────────────────────
 
 def test_update_assignments_builds_parameterized_clause_from_known_columns():
