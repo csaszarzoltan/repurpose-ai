@@ -27,6 +27,40 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+# Allowlisted columns for UPDATE statements. Keys are NEVER taken from caller
+# data: anything not in this set raises ValueError instead of being interpolated
+# into the SQL text (security-gate finding — column-name injection hardening).
+PROJECT_UPDATE_COLUMNS = frozenset({
+    "title",
+    "body",
+    "source_format",
+    "target_formats",
+    "brand_voice",
+    "custom_instructions",
+    "status",
+    "updated_at",
+})
+RECIPE_UPDATE_COLUMNS = frozenset({
+    "name",
+    "target_formats",
+    "brand_voice",
+    "custom_instructions",
+    "updated_at",
+})
+
+
+def _update_assignments(changes: dict, allowed_columns: frozenset[str]) -> str:
+    """Build a parameterized ``SET`` clause from an allowlist of columns.
+
+    Unknown keys raise ValueError — column names are never interpolated from
+    caller-supplied data.
+    """
+    unknown = sorted(set(changes) - allowed_columns)
+    if unknown:
+        raise ValueError(f"unknown column(s) for update: {', '.join(unknown)}")
+    return ", ".join(f"{key} = ?" for key in changes)
+
+
 class ProjectStore:
     def __init__(self, data_dir: str | Path | None = None) -> None:
         root = Path(data_dir or os.getenv("REPURPOSEAI_DATA_DIR", "./data"))
@@ -153,12 +187,11 @@ class ProjectStore:
             if key in changes and changes[key] is not None:
                 changes[key] = changes[key].value
         changes["updated_at"] = _now()
-        assignments = ", ".join(f"{key} = ?" for key in changes)
+        assignments = _update_assignments(changes, PROJECT_UPDATE_COLUMNS)
         values = list(changes.values()) + [owner_id, project_id]
+        sql = "UPDATE content_projects SET " + assignments + " WHERE owner_id = ? AND id = ?"
         with self._connect() as db:
-            result = db.execute(
-                f"UPDATE content_projects SET {assignments} WHERE owner_id = ? AND id = ?", values
-            )
+            result = db.execute(sql, values)
             if result.rowcount == 0:
                 raise KeyError(project_id)
         return self.get(owner_id, project_id)
@@ -396,14 +429,11 @@ class ProjectStore:
         if "brand_voice" in changes and changes["brand_voice"] is not None:
             changes["brand_voice"] = changes["brand_voice"].value
         changes["updated_at"] = _now()
-        assignments = ", ".join(f"{key} = ?" for key in changes)
+        assignments = _update_assignments(changes, RECIPE_UPDATE_COLUMNS)
         values = list(changes.values()) + [owner_id, recipe_id]
+        sql = "UPDATE generation_recipes SET " + assignments + " WHERE owner_id = ? AND id = ?"
         with self._connect() as db:
-            result = db.execute(
-                f"UPDATE generation_recipes SET {assignments} "
-                "WHERE owner_id = ? AND id = ?",
-                values,
-            )
+            result = db.execute(sql, values)
             if result.rowcount == 0:
                 raise KeyError(recipe_id)
         return self.get_recipe(owner_id, recipe_id)
