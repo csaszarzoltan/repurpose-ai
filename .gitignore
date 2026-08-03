@@ -30,6 +30,12 @@ htmlcov/
 .env
 .env.local
 
+# Frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/*.tsbuildinfo
+
 # Local persistent workspace data
 data/
 *.sqlite3
