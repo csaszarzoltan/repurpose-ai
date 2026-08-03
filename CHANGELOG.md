@@ -11,6 +11,7 @@
 
 ### Fixed
 - Malformed `from_date`/`to_date` query parameters previously caused unhandled 500s on the summary and trend endpoints; they now return 422 Unprocessable Entity with a descriptive message, enforced at a single parse chokepoint.
+- `/health` capability flags now report `analytics_data` and `pdf_export` as `available` (were stale `scaffold` markers from the pre-implementation era), and application/package version is synchronized to 1.6.0.
 
 ### Documentation
 - Rewrote `docs/analytics.md` for the real-data implementation: architecture and data flow, SQLite data store, verified scoring/validation/export/trend examples, dashboard UI, local setup/run instructions, and a full API reference with request/response bodies.

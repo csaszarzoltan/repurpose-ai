@@ -22,7 +22,7 @@ async def health_check() -> dict:
             "variant_history": "available",
             "saved_recipes": "available",
             "project_persistence": "available",
-            "pdf_export": "scaffold",
-            "analytics_data": "scaffold",
+            "pdf_export": "available",
+            "analytics_data": "available",
         },
     }
