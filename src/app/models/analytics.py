@@ -91,6 +91,44 @@ class TrendData(BaseModel):
     granularity: str = ""
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Request payloads for the analytics API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ScoreRequest(BaseModel):
+    """Body for POST /optimization-score/calculate."""
+
+    platform: str = ""
+    metrics: dict[str, float] = {}
+
+
+class ValidationRequest(BaseModel):
+    """Body for POST /validate."""
+
+    draft: str = ""
+    published: str = ""
+    source_material: str | None = None
+    run_llm_judge: bool = False
+
+
+class ExportRequest(BaseModel):
+    """Body for POST /export/csv and POST /export/pdf."""
+
+    metric_selection: list[str] = ["reach"]
+    date_range: list[str] | None = None
+    platform_filter: str | None = None
+    brand_config: dict | None = None
+
+
+class ExportScheduleRequest(BaseModel):
+    """Body for POST /export/schedule."""
+
+    export_type: str = "csv"
+    cadence: str = "daily"
+    metric_selection: list[str] = ["reach"]
+
+
 # ── Forward-reference resolution (Pydantic v2 + from __future__ annotations) ──
 
 PostMetrics.model_rebuild()

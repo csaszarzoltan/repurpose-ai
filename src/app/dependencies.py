@@ -6,6 +6,11 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.models.auth import UserResponse
+from app.services.analytics.db.repository import (
+    MetricsRepository,
+    ScoreRepository,
+    ValidationRepository,
+)
 from app.services.api_key import has_scope, validate_api_key
 from app.services.auth import decode_token, get_user_by_id
 
@@ -126,3 +131,27 @@ async def require_scope(required_scope: str) -> callable:
         return key_record
 
     return _scope_checker
+
+
+# ── Analytics repository providers ────────────────────────────
+# Module-level singletons so data persisted through the API (e.g. by
+# MetricsCollector) stays visible across requests. Tests override these
+# providers with seeded repository instances via dependency_overrides.
+_metrics_repository = MetricsRepository()
+_score_repository = ScoreRepository()
+_validation_repository = ValidationRepository()
+
+
+def get_metrics_repository() -> MetricsRepository:
+    """Dependency: the shared analytics metrics repository."""
+    return _metrics_repository
+
+
+def get_score_repository() -> ScoreRepository:
+    """Dependency: the shared analytics optimization-score repository."""
+    return _score_repository
+
+
+def get_validation_repository() -> ValidationRepository:
+    """Dependency: the shared analytics validation-report repository."""
+    return _validation_repository

@@ -198,7 +198,8 @@ class TestAnalyticsEndpointsBehavior:
         from app.main import app
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/api/v1/analytics/posts/test_123")
-        assert response.status_code == 200
+        # Real implementation: unknown posts 404 (facade previously fabricated data).
+        assert response.status_code == 404
 
     async def test_summary_returns_aggregates(self):
         from httpx import ASGITransport, AsyncClient

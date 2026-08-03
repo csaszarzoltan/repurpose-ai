@@ -29,7 +29,7 @@ class ValidationAnalyzer:
         readability = self.compute_readability_scores(draft)
         diff_blocks = self.compute_diff_blocks(draft, published)
         result: dict = {
-            "quality_delta": 0.15,
+            "quality_delta": self.compute_quality_delta(draft, published),
             "readability": readability,
             "diff_blocks": diff_blocks,
         }
@@ -40,6 +40,15 @@ class ValidationAnalyzer:
         if run_llm_judge:
             result["llm_judge"] = await self.compute_llm_judge(draft, published)
         return result
+
+    def compute_quality_delta(self, draft: str, published: str) -> float:
+        """Compute the quality gap between draft and published content.
+
+        Derived from the SequenceMatcher similarity ratio: identical texts
+        yield ``0.0``, diverging texts move toward ``1.0``.
+        """
+        ratio = difflib.SequenceMatcher(None, draft, published).ratio()
+        return round(max(0.0, 1.0 - ratio), 4)
 
     def compute_readability_scores(self, text: str) -> dict:
         """Compute readability metrics: Flesch-Kincaid, Dale-Chall, ARI."""
