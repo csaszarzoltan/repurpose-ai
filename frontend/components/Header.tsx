@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChevronDownIcon, DownloadIcon, RefreshIcon, SparkleIcon } from "@/components/icons";
 import { Button } from "@/components/ui";
 import { cls } from "@/lib/format";
@@ -99,6 +100,12 @@ export function Header({
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <Link
+            href="/repurpose"
+            className="rounded-[6px] px-3 py-2 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink-soft"
+          >
+            Repurpose
+          </Link>
           <Button onClick={onRefresh} disabled={loading} variant="subtle" ariaLabel="Refresh data">
             <RefreshIcon className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
             <span className="hidden sm:inline">Refresh</span>
