@@ -64,9 +64,14 @@ class RepurposeRequest(BaseModel):
 
 
 class RepurposeResponse(BaseModel):
-    """Response containing repurposed content."""
+    """Response containing repurposed content.
+
+    ``repurposed`` maps each requested format to its generated content.
+    The value is a plain ``str`` for the legacy single-language shape, or a
+    ``{lang_code: content}`` mapping when ``target_languages`` was requested.
+    """
     original_id: str
-    repurposed: dict[ContentFormat, str] = Field(default_factory=dict)
+    repurposed: dict[ContentFormat, str | dict[str, str]] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

@@ -13,6 +13,7 @@ from app.models.content import (
     ContentItem,
 )
 from app.models.workflow import BatchRepurposeResponse
+from app.services.languages import validate_languages
 from app.services.repurpose import RepurposeService
 
 router = APIRouter(prefix="/api/v1", tags=["batch"])
@@ -88,12 +89,26 @@ async def batch_repurpose(body: dict) -> dict:
                 except ValueError:
                     brand_voice = BrandVoice.PROFESSIONAL
 
+                # Optional per-language output: reject unsupported codes for
+                # this job (failed job, not a whole-request 422).
+                target_languages = job.get("target_languages", [])
+                if not isinstance(target_languages, list):
+                    return {
+                        "status": "failed",
+                        "error": "target_languages must be a list of ISO 639-1 codes",
+                    }
+                try:
+                    validate_languages(target_languages)
+                except ValueError as exc:
+                    return {"status": "failed", "error": str(exc)}
+
                 svc = RepurposeService()
                 result = await svc.repurpose(
                     content=content_item,
                     target_formats=target_formats,
                     brand_voice=brand_voice,
                     custom_instructions=job.get("custom_instructions"),
+                    target_languages=target_languages,
                 )
 
                 return {

@@ -1,12 +1,15 @@
 """Languages API endpoint — multi-language repurposing support.
 
-Pre-dev stub: the route exists (interface contract) but the handler raises
-``NotImplementedError`` until the feature is implemented.
+Exposes the supported-language registry so the frontend language
+multi-select dropdown can render ``id``, ``name`` and ``native_name``
+for every language the backend can translate into.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter
+
+from app.services.languages import SUPPORTED_LANGUAGES
 
 router = APIRouter(prefix="/api/v1", tags=["languages"])
 
@@ -17,4 +20,4 @@ async def list_languages() -> list[dict[str, str]]:
 
     Used by the frontend language multi-select dropdown.
     """
-    raise NotImplementedError("GET /api/v1/languages is not implemented yet")
+    return list(SUPPORTED_LANGUAGES.values())

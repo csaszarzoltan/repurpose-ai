@@ -1,12 +1,15 @@
 """Multi-language content repurposing support.
 
-Pre-dev stubs for the multi-language feature (analyst spec t_758a9a4e):
+Provides the supported-language registry and the helpers that power the
+multi-language repurposing feature (analyst spec t_758a9a4e):
 
-- ``SUPPORTED_LANGUAGES`` registry — real contract data (14 ISO 639-1 codes
-  with display names), so the interface tests can verify the registry shape.
-- ``validate_languages``, ``build_per_language_output`` and
-  ``estimate_multilang_tokens`` — behavioral stubs that raise
-  ``NotImplementedError`` until the feature is implemented.
+- ``SUPPORTED_LANGUAGES`` — the 14 ISO 639-1 codes the product supports for
+  translated output, with English and native display names.
+- ``validate_languages`` — reject unsupported codes before any generation.
+- ``build_per_language_output`` — expand the legacy single-language output
+  shape into the per-language shape used when translations are requested.
+- ``estimate_multilang_tokens`` — token estimate that scales with the number
+  of target languages.
 """
 
 from __future__ import annotations
@@ -37,7 +40,13 @@ def validate_languages(target_languages: list[str]) -> None:
     supported (an empty list is valid — it preserves the legacy single-language
     behavior).
     """
-    raise NotImplementedError("Multi-language validation is not implemented yet")
+    unsupported = sorted({code for code in target_languages if code not in SUPPORTED_LANGUAGES})
+    if unsupported:
+        supported = ", ".join(sorted(SUPPORTED_LANGUAGES))
+        raise ValueError(
+            f"Unsupported language code(s): {', '.join(unsupported)}. "
+            f"Supported languages: {supported}"
+        )
 
 
 def build_per_language_output(
@@ -47,8 +56,15 @@ def build_per_language_output(
     multi-language shape ``{format: {lang_code: content}}``.
 
     ``repurposed`` is the legacy single-language output keyed by format id.
+    When ``target_languages`` is empty the mapping is returned unchanged
+    (legacy passthrough).
     """
-    raise NotImplementedError("Per-language output expansion is not implemented yet")
+    if not target_languages:
+        return repurposed  # type: ignore[return-value]  # legacy passthrough
+    return {
+        fmt: {lang: content for lang in target_languages}
+        for fmt, content in repurposed.items()
+    }
 
 
 def estimate_multilang_tokens(text: str, target_languages: list[str]) -> int:
@@ -56,6 +72,9 @@ def estimate_multilang_tokens(text: str, target_languages: list[str]) -> int:
 
     Accounts for each target language: the estimate grows with the number of
     languages (per-language generation cost). With an empty language list it
-    must match the legacy single-language estimate.
+    matches the legacy single-language estimate (roughly 4 chars per token).
     """
-    raise NotImplementedError("Multi-language token estimation is not implemented yet")
+    base = max(1, len(text) // 4)
+    if not target_languages:
+        return base
+    return base * len(target_languages)
