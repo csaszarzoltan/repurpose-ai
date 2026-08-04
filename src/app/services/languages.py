@@ -36,7 +36,10 @@ def validate_languages(target_languages: list[str]) -> None:
     """Validate target language codes against ``SUPPORTED_LANGUAGES``.
 
     Raises ``ValueError`` with a message listing the supported language codes
-    when any code is not in the registry. Returns ``None`` when all codes are
+    when any code is not in the registry. Duplicate codes and lists longer
+    than the registry are rejected too: every entry maps to its own LLM
+    generation, so duplicates would amplify LLM calls without adding output
+    (OWASP LLM10 — unbounded consumption). Returns ``None`` when all codes are
     supported (an empty list is valid — it preserves the legacy single-language
     behavior).
     """
@@ -46,6 +49,23 @@ def validate_languages(target_languages: list[str]) -> None:
         raise ValueError(
             f"Unsupported language code(s): {', '.join(unsupported)}. "
             f"Supported languages: {supported}"
+        )
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for code in target_languages:
+        if code in seen:
+            duplicates.add(code)
+        seen.add(code)
+    if duplicates:
+        raise ValueError(
+            f"Duplicate language code(s): {', '.join(sorted(duplicates))}. "
+            "Each language may be requested at most once."
+        )
+    if len(target_languages) > len(SUPPORTED_LANGUAGES):
+        raise ValueError(
+            f"Too many target languages: {len(target_languages)} "
+            f"(maximum {len(SUPPORTED_LANGUAGES)}). "
+            "Each language may be requested at most once."
         )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from typing import TYPE_CHECKING
@@ -18,6 +19,7 @@ from app.services.languages import (
     SUPPORTED_LANGUAGES,
     build_per_language_output,
     estimate_multilang_tokens,
+    validate_languages,
 )
 from app.services.llm.router import LLMRouter, RouterStrategy
 
@@ -50,11 +52,13 @@ class RepurposeService:
         user: UserResponse | None = None,
         llm_router: LLMRouter | None = None,
         format_registry: FormatRegistry | None = None,
+        max_concurrent_languages: int = 5,
     ) -> None:
         self.api_key = api_key
         self.user = user
         self.llm_router = llm_router
         self.format_registry = format_registry
+        self.max_concurrent_languages = max(1, max_concurrent_languages)
 
     def _resolve_brand_voice(
         self, requested_voice: BrandVoice, custom_instructions: str | None
@@ -123,6 +127,12 @@ class RepurposeService:
         per requested language; an empty list (the default) preserves the
         legacy single-language ``{format: content}`` shape.
         """
+        # Defense-in-depth: reject unsupported / duplicate / over-long codes
+        # here so every caller (API, batch, workflow, webhook) is covered even
+        # if a boundary forgets to validate. ``_language_instruction``
+        # interpolates the raw code into the LLM prompt, so it must never see
+        # an unvalidated value.
+        validate_languages(target_languages or [])
         resolved_voice, resolved_custom = self._resolve_brand_voice(
             brand_voice, custom_instructions
         )
@@ -194,26 +204,37 @@ class RepurposeService:
         """Generate content for a single format using the LLM layer.
 
         With ``target_languages`` set, returns a ``{lang_code: content}``
-        mapping — one native-language LLM pass per requested language.
-        Otherwise returns the legacy single-language ``str``.
+        mapping — one native-language LLM pass per requested language, run
+        concurrently (bounded by ``max_concurrent_languages``) with per-language
+        error isolation. Otherwise returns the legacy single-language ``str``.
         """
         if target_languages:
-            per_language: dict[str, str] = {}
-            for lang in target_languages:
-                per_language[lang] = await self._generate_single_language(
-                    fmt=fmt,
-                    content=content,
-                    resolved_voice=resolved_voice,
-                    resolved_custom=resolved_custom,
-                    voice_config=voice_config,
-                    strategy=strategy,
-                    preferred_provider=preferred_provider,
-                    preferred_model=preferred_model,
-                    warnings=warnings,
-                    target_language=lang,
-                    target_languages=target_languages,
-                )
-            return per_language
+            semaphore = asyncio.Semaphore(self.max_concurrent_languages)
+
+            async def _generate_one(lang: str) -> tuple[str, str]:
+                async with semaphore:
+                    text = await self._generate_single_language(
+                        fmt=fmt,
+                        content=content,
+                        resolved_voice=resolved_voice,
+                        resolved_custom=resolved_custom,
+                        voice_config=voice_config,
+                        strategy=strategy,
+                        preferred_provider=preferred_provider,
+                        preferred_model=preferred_model,
+                        warnings=warnings,
+                        target_language=lang,
+                        target_languages=target_languages,
+                    )
+                    return lang, text
+
+            # gather preserves input order, so the mapping keeps the requested
+            # language order; a failing language falls back inside
+            # _generate_single_language, so gather never raises for it.
+            results = await asyncio.gather(
+                *(_generate_one(lang) for lang in target_languages)
+            )
+            return dict(results)
 
         return await self._generate_single_language(
             fmt=fmt,
@@ -246,8 +267,9 @@ class RepurposeService:
         """Generate content for a single format/language pair via the LLM.
 
         ``target_language`` selects the native-language prompt instruction;
-        ``target_languages`` is the full requested list, used so token
-        estimation accounts for every output language.
+        ``target_languages`` is the full requested list, used for total cost
+        estimation in warnings only — the chunk decision uses the single-call
+        estimate.
         """
         try:
             template = self.format_registry.get(fmt)  # type: ignore[union-attr]
@@ -279,16 +301,24 @@ class RepurposeService:
 
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-        # Token-aware dispatch: estimate for every requested output language,
-        # then chunk the content if the prompt is very large.
-        estimate_langs = target_languages or ([target_language] if target_language else [])
-        estimated_tokens = estimate_multilang_tokens(full_prompt, estimate_langs)
+        # Token-aware dispatch: the context-window check must reflect a SINGLE
+        # (format, lang) call — each call carries exactly one language
+        # instruction, so the per-call prompt is ``full_prompt``, not
+        # full_prompt × N. The full-language-list estimate is used only for
+        # cost reporting/warnings.
+        single_call_estimate = estimate_multilang_tokens(
+            full_prompt, [target_language] if target_language else []
+        )
+        total_estimate = estimate_multilang_tokens(
+            full_prompt,
+            target_languages or ([target_language] if target_language else []),
+        )
         context_window_estimate = 128000
 
-        if estimated_tokens > context_window_estimate:
+        if single_call_estimate > context_window_estimate:
             warnings.append(
-                f"Content for '{fmt}' (~{estimated_tokens} tokens across "
-                f"{len(estimate_langs) or 1} language(s)) exceeds typical "
+                f"Content for '{fmt}' (~{total_estimate} tokens across "
+                f"{len(target_languages or []) or 1} language(s)) exceeds typical "
                 f"context window ({context_window_estimate}). Chunking content."
             )
             return await self._dispatch_chunked(
