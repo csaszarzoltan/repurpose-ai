@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased] - 2026-08-04
+
+### Added
+- Multi-language repurposing: `POST /api/v1/repurpose` and per-job `POST /api/v1/repurpose/batch` accept an optional `target_languages` list of ISO 639-1 codes. When non-empty, every requested format's `repurposed` value becomes a `{lang_code: content}` mapping generated natively in each language via the existing LLM router (no external translation APIs); an empty list preserves the legacy single-language `{format: content}` shape. Unsupported codes are rejected with 422 on the single endpoint and mark the batch job failed.
+- New `GET /api/v1/languages` registry endpoint returning the 14 supported target languages as `{id, name, native_name}` with ISO 639-1 ids (`es`, `de`, `fr`, `pt`, `it`, `nl`, `ja`, `ko`, `zh`, `hi`, `ar`, `ru`, `pl`, `tr`).
+- Language-aware token estimation: the per-request LLM token estimate scales with the number of target languages and feeds the chunking decision.
+- `/repurpose` UI: language multi-select populated from the registry (native name/name, empty-state + retry on failure), `target_languages` included in the submit payload only when selected, and per-format per-language output tabs (legacy single-language view preserved when no languages are selected).
+
+### Documentation
+- README: multi-language support in the feature list, `target_languages` request field, the languages registry reference with the supported-languages table, per-language response shape, and batch examples.
+- New `FEATURES-DONE.md` documenting the completed multi-language repurposing capability.
+
 ## [1.6.0] - 2026-08-03
 
 ### Added

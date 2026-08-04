@@ -30,6 +30,7 @@ AI-powered content repurposing tool that transforms one piece of content into 20
 - Brand voice customization (per-request or per-user)
 - **X-LLM-Provider / X-LLM-Model headers** for per-request provider selection
 - Token-aware dispatch with automatic chunking for large content
+- **Multi-language repurposing** — generate every format natively in up to 14 languages via `target_languages` on the repurpose API, with a language registry at `GET /api/v1/languages`
 - JWT user authentication (register, login, token refresh)
 - Multi-tenant data isolation (users only see their own content)
 - Personal brand voice configuration per user
@@ -269,6 +270,91 @@ curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/repurpose
 
 > If authenticated via `Authorization` header, the user's personal brand voice configuration is applied automatically.
 
+### Multi-Language Repurposing
+
+Pass an optional `target_languages` list of ISO 639-1 codes to generate every requested format natively in each language (no external translation APIs — the existing LLM router performs one native-language pass per format/language). When `target_languages` is empty or omitted, the legacy single-language `{format: content}` response shape is preserved.
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/repurpose \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": {
+      "title": "AI in Healthcare",
+      "body": "AI is transforming diagnostics.",
+      "source_format": "blog_post"
+    },
+    "target_formats": ["twitter_thread", "linkedin_post"],
+    "target_languages": ["es", "de"]
+  }'
+```
+
+Each format's `repurposed` value becomes a `{lang_code: content}` mapping:
+
+```json
+{
+  "original_id": "",
+  "repurposed": {
+    "twitter_thread": {
+      "es": "Write in a formal tone.\n\nAI is transforming diagnostics.",
+      "de": "Write in a formal tone.\n\nAI is transforming diagnostics."
+    },
+    "linkedin_post": {
+      "es": "Write in a formal tone.\n\nAI is transforming diagnostics.",
+      "de": "Write in a formal tone.\n\nAI is transforming diagnostics."
+    }
+  },
+  "warnings": [],
+  "created_at": "2026-08-04T23:05:13.221442"
+}
+```
+
+> **Note**: with LLM providers configured, each language's content is generated natively in that language. Without any provider API key the service falls back to string concatenation, expanding the same content into each language (shown above).
+
+Unsupported codes are rejected with **422** and a message listing the supported codes:
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/repurpose \
+  -H "Content-Type: application/json" \
+  -d '{"content": {"title": "AI in Healthcare", "body": "AI is transforming diagnostics.", "source_format": "blog_post"}, "target_formats": ["twitter_thread"], "target_languages": ["xx"]}'
+# HTTP 422
+# {"detail":"Unsupported language code(s): xx. Supported languages: ar, de, es, fr, hi, it, ja, ko, nl, pl, pt, ru, tr, zh"}
+```
+
+**`GET /api/v1/languages`** — list the supported target languages (used by the frontend language multi-select). Each entry carries the ISO 639-1 id, the English name, and the native name:
+
+```bash
+curl https://repurposeai-production-d688.up.railway.app/api/v1/languages
+```
+
+The endpoint returns all 14 supported languages (first three entries shown):
+
+```json
+[
+  {"id": "es", "name": "Spanish", "native_name": "Español"},
+  {"id": "de", "name": "German", "native_name": "Deutsch"},
+  {"id": "fr", "name": "French", "native_name": "Français"}
+]
+```
+
+| id | Name | Native name |
+|----|------|-------------|
+| `es` | Spanish | Español |
+| `de` | German | Deutsch |
+| `fr` | French | Français |
+| `pt` | Portuguese | Português |
+| `it` | Italian | Italiano |
+| `nl` | Dutch | Nederlands |
+| `ja` | Japanese | 日本語 |
+| `ko` | Korean | 한국어 |
+| `zh` | Chinese | 中文 |
+| `hi` | Hindi | हिन्दी |
+| `ar` | Arabic | العربية |
+| `ru` | Russian | Русский |
+| `pl` | Polish | Polski |
+| `tr` | Turkish | Türkçe |
+
+Token estimation scales with the number of target languages; very large multi-language requests are automatically chunked.
+
 ### Async Webhook Repurposing
 
 Submit content for async processing and poll for results via callback. Designed for large payloads or when you don't want to block on repurposing.
@@ -451,6 +537,7 @@ Repurpose multiple content items in a single request. Processes jobs concurrentl
 | `target_formats` | array | Yes | List of format IDs |
 | `brand_voice` | string | No | `professional` (default), `casual`, `humorous`, `formal` |
 | `custom_instructions` | string | No | Optional per-job custom instructions |
+| `target_languages` | array | No | Optional ISO 639-1 codes — produces the per-language `{format: {lang_code: content}}` shape for that job; unsupported codes mark **that job** failed (not the whole request) |
 
 ```bash
 curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/repurpose/batch \
@@ -465,7 +552,8 @@ curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/repurpose
       {
         "content": {"title": "Quantum Computing", "body": "Quantum computing advances in 2026.", "source_format": "blog_post"},
         "target_formats": ["linkedin_post", "newsletter"],
-        "brand_voice": "casual"
+        "brand_voice": "casual",
+        "target_languages": ["fr", "de"]
       },
       {
         "content": {"title": "DevOps Best Practices", "body": "CI/CD pipelines in 2026.", "source_format": "blog_post"},
