@@ -60,6 +60,7 @@ class RepurposeRequest(BaseModel):
     brand_voice: BrandVoice = BrandVoice.PROFESSIONAL
     custom_instructions: str | None = None
     llm_strategy: str | None = None
+    target_languages: list[str] = Field(default_factory=list)
 
 
 class RepurposeResponse(BaseModel):

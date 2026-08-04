@@ -15,6 +15,7 @@ from app.api.batch import router as batch_router
 from app.api.formats import router as formats_router
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
+from app.api.languages import router as languages_router
 from app.api.projects import router as projects_router
 from app.api.publish import router as publish_router
 from app.api.recipes import router as recipes_router
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(repurpose_router)
     app.include_router(formats_router)
+    app.include_router(languages_router)
     app.include_router(subscription_router)
     app.include_router(webhook_router)
     app.include_router(auth_router)
