@@ -58,20 +58,27 @@ async def publish_to_destinations(
     media_urls: list[str] | None = None,
     publish_service: PublishService | None = None,
     auth_service: PlatformAuthService | None = None,
-) -> list[tuple[str, PublishResponse]]:
+) -> tuple[list[tuple[str, PublishResponse]], list[str]]:
     """Publish ``content`` to every requested destination.
 
     ``media_urls`` is forwarded to image-driven platforms (Instagram IMAGE
-    posts). Returns a list of ``(platform_name, response)`` for the
-    destinations that had stored credentials and were dispatched (including
-    failed publishes — the caller decides how to surface them). Raises
-    ``ValueError`` for an unknown destination value before any publish is
-    attempted.
+    posts). Returns ``(published, warnings)``:
+
+    * ``published`` — ``(platform_name, response)`` pairs for destinations
+      that had stored credentials and were dispatched (including failed
+      publishes — the caller decides how to surface them);
+    * ``warnings`` — one human-readable line per destination that had no
+      stored credentials (so the caller can surface it in
+      ``RepurposeResponse.warnings`` instead of failing the repurpose).
+
+    Raises ``ValueError`` for an unknown destination value before any publish
+    is attempted.
     """
     svc = publish_service or _publish_service
     auth = auth_service or _auth_service
 
     published: list[tuple[str, PublishResponse]] = []
+    warnings: list[str] = []
     for destination in destinations:
         try:
             platform = PublishPlatform(destination.lower())
@@ -81,6 +88,10 @@ async def publish_to_destinations(
         creds = get_active_credentials(auth, platform)
         if creds is None:
             logger.warning("No stored credentials for destination '%s', skipping publish", destination)
+            warnings.append(
+                f"No stored credentials for destination '{destination}', "
+                "publish skipped"
+            )
             continue
 
         request = PublishRequest(
@@ -92,7 +103,7 @@ async def publish_to_destinations(
         response = await svc.publish(request, creds)
         published.append((platform.value, response))
 
-    return published
+    return published, warnings
 
 
 def summarize_publish_results(

@@ -108,7 +108,7 @@ async def repurpose_content(
             raise HTTPException(status_code=422, detail=str(exc)) from None
 
         try:
-            published = await publish_to_destinations(
+            published, destination_warnings = await publish_to_destinations(
                 request.destinations,
                 primary_text,
                 title=request.content.title,
@@ -126,6 +126,7 @@ async def repurpose_content(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
 
+        result.warnings.extend(destination_warnings)
         result.warnings.extend(summarize_publish_results(published))
 
     return result

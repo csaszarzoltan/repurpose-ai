@@ -18,6 +18,7 @@ httpx ASGITransport against the real app, respx for outbound Graph API calls.
 """
 from __future__ import annotations
 
+import pytest
 import respx
 from httpx import ASGITransport, AsyncClient
 
@@ -107,6 +108,48 @@ class TestInstagramPlatformCapabilityClaim:
 class TestRepurposeDestinationsPublishFlow:
     """End-to-end: destinations trigger PublishService against stored credentials."""
 
+    @pytest.fixture(autouse=True)
+    def _isolated_auth_service(self):
+        """Each test starts from a CLEAN credential + publisher cache.
+
+        The publish API module keeps module-level ``_auth_service`` /
+        ``_publish_service`` singletons. A test that stores credentials or
+        constructs an InstagramPublisher (lazily cached with an httpx client
+        bound to its own respx context) must not leak that state into the
+        next test — otherwise the no-credentials and failure tests become
+        order-dependent false greens (they fail when run in isolation).
+        """
+        from app.api.publish import _auth_service, _publish_service
+
+        original = getattr(_auth_service, "_credentials", {})
+        _auth_service._credentials = {}
+        # Drop cached publisher instances: their httpx clients are bound to a
+        # previous respx mock context and would miss the new test's routes.
+        # Both the publish API module and publish_destinations module keep
+        # module-level PublishService singletons that lazily cache publishers.
+        original_publishers = {
+            name: getattr(_publish_service, name)
+            for name in ("_linkedin", "_twitter", "_medium", "_instagram")
+        }
+        for name in original_publishers:
+            setattr(_publish_service, name, None)
+        from app.services.publish_destinations import (
+            _publish_service as dest_publish_service,
+        )
+
+        original_dest_publishers = {
+            name: getattr(dest_publish_service, name)
+            for name in ("_linkedin", "_twitter", "_medium", "_instagram")
+        }
+        for name in original_dest_publishers:
+            setattr(dest_publish_service, name, None)
+        yield
+        _auth_service._credentials = original
+        for name, instance in original_publishers.items():
+            setattr(_publish_service, name, instance)
+        for name, instance in original_dest_publishers.items():
+            setattr(dest_publish_service, name, instance)
+
     async def test_repurpose_with_instagram_destination_publishes(self):
         """POST /api/v1/repurpose with destinations:["instagram"] + stored creds
         → Graph API publish invoked, response carries the per-destination status."""
@@ -184,6 +227,60 @@ class TestRepurposeDestinationsPublishFlow:
         data = response.json()
         assert data["repurposed"]["twitter_thread"]
         assert any("instagram" in str(w) for w in data["warnings"])
+        assert any("credential" in str(w).lower() for w in data["warnings"])
+
+    async def test_publish_failure_warns_but_repurpose_succeeds(self):
+        """Graph API failure for a destination → warning entry, repurpose still 200."""
+        from app.api.publish import _auth_service
+        from app.models.publish import PlatformCredentials
+
+        _auth_service._credentials["instagram"] = [
+            PlatformCredentials(
+                platform="instagram",
+                access_token="valid_ig_token_dest",
+                platform_user_id=IG_USER_ID,
+                is_active=True,
+            )
+        ]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            with respx.mock:
+                # Container creation fails with a rate-limit error (Graph API style)
+                media_route = respx.post(f"{GRAPH_API}/{IG_USER_ID}/media").respond(
+                    status_code=429,
+                    json={"error": {"code": 4, "message": "rate limit"}},
+                )
+                publish_route = respx.post(
+                    f"{GRAPH_API}/{IG_USER_ID}/media_publish"
+                ).respond(
+                    status_code=200,
+                    json={"id": "post_dest_123"},
+                )
+                response = await client.post(
+                    "/api/v1/repurpose",
+                    json=_repurpose_payload(
+                        destinations=["instagram"],
+                        content={
+                            "title": "AI in Healthcare",
+                            "body": "Artificial intelligence is transforming healthcare diagnostics.",
+                            "source_format": "blog_post",
+                            "tags": ["ai"],
+                            # media_url is required for the Instagram IMAGE flow
+                            # to actually reach the Graph API container call.
+                            "media_url": "https://example.com/photo.jpg",
+                        },
+                    ),
+                )
+
+        assert response.status_code == 200
+        assert media_route.called, "container creation must have been attempted"
+        assert publish_route.called is False, "publish must not run after container failure"
+        data = response.json()
+        assert data["repurposed"]["twitter_thread"]
+        assert any("failed" in str(w).lower() for w in data["warnings"])
+        assert any("instagram" in str(w).lower() for w in data["warnings"])
 
     async def test_unknown_destination_returns_422(self):
         """Unknown platform value in destinations → 422."""
