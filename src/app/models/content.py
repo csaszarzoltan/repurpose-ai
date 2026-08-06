@@ -50,6 +50,7 @@ class ContentItem(BaseModel):
     body: str
     source_format: ContentFormat
     tags: list[str] = Field(default_factory=list)
+    media_url: str | None = None
     created_at: datetime | None = None
 
 
@@ -61,6 +62,7 @@ class RepurposeRequest(BaseModel):
     custom_instructions: str | None = None
     llm_strategy: str | None = None
     target_languages: list[str] = Field(default_factory=list)
+    destinations: list[str] = Field(default_factory=list)
 
 
 class RepurposeResponse(BaseModel):

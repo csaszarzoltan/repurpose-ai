@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.dependencies import get_optional_user
 from app.models.content import (
+    ContentFormat,
     RepurposeRequest,
     RepurposeResponse,
 )
@@ -18,6 +19,26 @@ if TYPE_CHECKING:
     from app.models.auth import UserResponse
 
 router = APIRouter(prefix="/api/v1", tags=["repurpose"])
+
+
+def _primary_repurposed_text(
+    repurposed: dict[ContentFormat, str | dict[str, str]],
+) -> str:
+    """Extract a single publishable text from the repurposed output.
+
+    Picks the first entry in request order (the first target format). For
+    multi-language output the first language's text is used — the publish
+    step publishes the primary (source) language variant.
+    """
+    if not repurposed:
+        raise ValueError("No repurposed content to publish")
+
+    first_value = next(iter(repurposed.values()))
+    if isinstance(first_value, dict):
+        if not first_value:
+            raise ValueError("No repurposed content to publish")
+        return next(iter(first_value.values()))
+    return first_value
 
 
 @router.post("/repurpose", response_model=RepurposeResponse)
@@ -61,4 +82,50 @@ async def repurpose_content(
         preferred_model=x_llm_model,
         target_languages=request.target_languages,
     )
+
+    # Publish destinations: after a successful repurpose, dispatch the
+    # primary output to each requested platform. Unknown platforms → 422;
+    # missing credentials / publish failures → warning entries, the
+    # repurpose result itself is never failed.
+    if request.destinations:
+        # Reuse the publish API's module-level service instances so the
+        # credential store is SHARED with the OAuth connect flow and the
+        # publish endpoint (a separate instance would see no credentials).
+        from app.api.publish import (
+            _auth_service as publish_auth_service,
+        )
+        from app.api.publish import (
+            _publish_service as publish_service,
+        )
+        from app.services.publish_destinations import (
+            publish_to_destinations,
+            summarize_publish_results,
+        )
+
+        try:
+            primary_text = _primary_repurposed_text(result.repurposed)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+        try:
+            published = await publish_to_destinations(
+                request.destinations,
+                primary_text,
+                title=request.content.title,
+                publish_service=publish_service,
+                auth_service=publish_auth_service,
+                # The repurpose payload has no top-level media field today;
+                # forward the source content's media URL when present so
+                # image-driven destinations (Instagram) can publish.
+                media_urls=(
+                    [request.content.media_url]
+                    if getattr(request.content, "media_url", None)
+                    else None
+                ),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+        result.warnings.extend(summarize_publish_results(published))
+
     return result

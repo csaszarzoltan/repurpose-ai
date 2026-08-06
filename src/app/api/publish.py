@@ -59,7 +59,7 @@ async def list_platforms() -> list[dict[str, str]]:
         {"name": "linkedin", "display_name": "LinkedIn", "post_type": "text, article, image"},
         {"name": "twitter", "display_name": "Twitter / X", "post_type": "tweet, thread, media"},
         {"name": "medium", "display_name": "Medium", "post_type": "article"},
-        {"name": "instagram", "display_name": "Instagram", "post_type": "image, carousel, reel, story"},
+        {"name": "instagram", "display_name": "Instagram", "post_type": "image, carousel, reel"},
     ]
 
 
