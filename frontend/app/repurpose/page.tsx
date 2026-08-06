@@ -6,6 +6,7 @@ import { AlertIcon, ChartIcon, CheckIcon, SparkleIcon } from "@/components/icons
 import { Button, Card, CardHeader, Spinner } from "@/components/ui";
 import { LanguageMultiSelect } from "@/components/repurpose/LanguageMultiSelect";
 import { RepurposeOutput } from "@/components/repurpose/RepurposeOutput";
+import { DestinationSelector } from "@/components/publish/DestinationSelector";
 import { cls } from "@/lib/format";
 import {
   ApiError,
@@ -61,6 +62,8 @@ export default function RepurposePage() {
   const [brandVoice, setBrandVoice] = useState<BrandVoice>("professional");
   const [customInstructions, setCustomInstructions] = useState("");
   const [targetLanguages, setTargetLanguages] = useState<string[]>([]);
+  // Publish destinations (platforms) the user wants to publish to
+  const [destinations, setDestinations] = useState<string[]>([]);
 
   // Submission state
   const [submitting, setSubmitting] = useState(false);
@@ -113,6 +116,12 @@ export default function RepurposePage() {
     );
   }
 
+  function toggleDestination(id: string) {
+    setDestinations((prev) =>
+      prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
+    );
+  }
+
   async function onSubmit() {
     setFormError(null);
     setSubmitError(null);
@@ -142,6 +151,8 @@ export default function RepurposePage() {
       // Omit entirely when no languages selected → backend keeps the legacy
       // single-language shape.
       ...(targetLanguages.length > 0 ? { target_languages: targetLanguages } : {}),
+      // Optional: publish destinations (only connected platforms can be selected).
+      ...(destinations.length > 0 ? { destinations } : {}),
     };
 
     setSubmitting(true);
@@ -339,6 +350,35 @@ export default function RepurposePage() {
                     <Spinner className="h-3.5 w-3.5" /> Loading target formats…
                   </div>
                 )}
+              </div>
+            </Card>
+
+            {/* ── Publish destinations ──────────────────────────────────── */}
+            <Card>
+              <CardHeader
+                title="Publish destinations"
+                subtitle="Where should this content be published?"
+                right={
+                  destinations.length > 0 ? (
+                    <span className="text-[12px] font-medium text-ink-soft">
+                      {destinations.length} selected
+                    </span>
+                  ) : undefined
+                }
+              />
+              <div className="p-5">
+                <DestinationSelector
+                  selected={destinations}
+                  onToggle={toggleDestination}
+                />
+                <div className="mt-3">
+                  <Link
+                    href="/connections"
+                    className="text-[12px] font-medium text-brand-bright underline-offset-2 transition-colors hover:text-brand-hover hover:underline"
+                  >
+                    Manage platform connections
+                  </Link>
+                </div>
               </div>
             </Card>
 

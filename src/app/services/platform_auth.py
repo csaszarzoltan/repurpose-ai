@@ -1,6 +1,7 @@
 """Platform authentication service for OAuth2 flows."""
 from __future__ import annotations
 
+import os
 from contextlib import suppress
 from datetime import datetime, timedelta
 
@@ -35,10 +36,29 @@ PLATFORM_AUTH_CONFIG: dict[str, dict[str, str]] = {
         "auth_url": "https://www.facebook.com/v19.0/dialog/oauth",
         "token_url": "https://graph.facebook.com/v19.0/oauth/access_token",
         "revoke_url": "https://graph.facebook.com/v19.0/oauth/authorize",
+        # Client id/secret are secrets — resolved from the environment at
+        # auth time (INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET) with a
+        # placeholder fallback so the authorize URL stays well-formed even
+        # before credentials are configured. See get_auth_url()/exchange_code().
         "client_id": "",
+        "client_secret": "",
         "scope": "instagram_basic,instagram_content_publish,instagram_manage_insights",
     },
 }
+
+# Env vars that supply real OAuth credentials for Instagram (Meta app).
+_INSTAGRAM_CLIENT_ID = os.getenv("INSTAGRAM_CLIENT_ID", "")
+_INSTAGRAM_CLIENT_SECRET = os.getenv("INSTAGRAM_CLIENT_SECRET", "")
+
+
+def _instagram_config() -> dict[str, str]:
+    """Resolve the effective Instagram OAuth config (env override)."""
+    cfg = dict(PLATFORM_AUTH_CONFIG["instagram"])
+    if _INSTAGRAM_CLIENT_ID:
+        cfg["client_id"] = _INSTAGRAM_CLIENT_ID
+    if _INSTAGRAM_CLIENT_SECRET:
+        cfg["client_secret"] = _INSTAGRAM_CLIENT_SECRET
+    return cfg
 
 
 class PlatformAuthService:
@@ -56,7 +76,11 @@ class PlatformAuthService:
 
     def get_auth_url(self, platform: PublishPlatform, redirect_uri: str) -> str:
         """Generate the OAuth2 authorization URL for a platform."""
-        config = PLATFORM_AUTH_CONFIG[platform.value]
+        config = (
+            _instagram_config()
+            if platform is PublishPlatform.INSTAGRAM
+            else PLATFORM_AUTH_CONFIG[platform.value]
+        )
         params = {
             "response_type": "code",
             "client_id": config["client_id"],
@@ -76,13 +100,17 @@ class PlatformAuthService:
         redirect_uri: str,
     ) -> PlatformCredentials:
         """Exchange an authorization code for access+refresh tokens."""
-        config = PLATFORM_AUTH_CONFIG[platform.value]
+        config = (
+            _instagram_config()
+            if platform is PublishPlatform.INSTAGRAM
+            else PLATFORM_AUTH_CONFIG[platform.value]
+        )
         data = {
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": redirect_uri,
             "client_id": config["client_id"],
-            "client_secret": "client_secret_placeholder",
+            "client_secret": config.get("client_secret", "client_secret_placeholder"),
         }
 
         response = await self._http.post(config["token_url"], data=data)
@@ -108,12 +136,16 @@ class PlatformAuthService:
 
     async def refresh_credentials(self, credentials: PlatformCredentials) -> PlatformCredentials:
         """Refresh an expired token using its refresh token."""
-        config = PLATFORM_AUTH_CONFIG[credentials.platform.value]
+        config = (
+            _instagram_config()
+            if credentials.platform is PublishPlatform.INSTAGRAM
+            else PLATFORM_AUTH_CONFIG[credentials.platform.value]
+        )
         data = {
             "grant_type": "refresh_token",
             "refresh_token": credentials.refresh_token or "",
             "client_id": config["client_id"],
-            "client_secret": "client_secret_placeholder",
+            "client_secret": config.get("client_secret", "client_secret_placeholder"),
         }
 
         response = await self._http.post(config["token_url"], data=data)
@@ -134,11 +166,15 @@ class PlatformAuthService:
 
     async def revoke_credentials(self, platform: PublishPlatform) -> None:
         """Revoke tokens and remove stored credentials."""
-        config = PLATFORM_AUTH_CONFIG[platform.value]
+        config = (
+            _instagram_config()
+            if platform is PublishPlatform.INSTAGRAM
+            else PLATFORM_AUTH_CONFIG[platform.value]
+        )
         data = {
             "token": "",
             "client_id": config["client_id"],
-            "client_secret": "client_secret_placeholder",
+            "client_secret": config.get("client_secret", "client_secret_placeholder"),
         }
 
         with suppress(httpx.HTTPError):

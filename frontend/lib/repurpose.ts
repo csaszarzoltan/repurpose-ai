@@ -108,6 +108,8 @@ export interface RepurposePayload {
   llm_strategy?: string;
   /** ISO 639-1 codes; omitted entirely when no languages are selected. */
   target_languages?: string[];
+  /** Optional publish destinations (platform names); only connected platforms. */
+  destinations?: string[];
 }
 
 /** Legacy single-language shape: {format: content}. */

@@ -59,6 +59,7 @@ async def list_platforms() -> list[dict[str, str]]:
         {"name": "linkedin", "display_name": "LinkedIn", "post_type": "text, article, image"},
         {"name": "twitter", "display_name": "Twitter / X", "post_type": "tweet, thread, media"},
         {"name": "medium", "display_name": "Medium", "post_type": "article"},
+        {"name": "instagram", "display_name": "Instagram", "post_type": "image, carousel, reel, story"},
     ]
 
 
@@ -99,7 +100,12 @@ async def get_auth_url(platform: str, redirect_uri: str) -> dict[str, str]:
 
 
 @router.post("/publish/{platform}/callback")
-async def auth_callback(platform: str, code: str, state: str | None = None) -> dict[str, str]:
+async def auth_callback(
+    platform: str,
+    code: str,
+    state: str | None = None,
+    redirect_uri: str | None = None,
+) -> dict[str, str]:
     """Exchange the authorization code for platform credentials."""
     try:
         pub_platform = PublishPlatform(platform.lower())
@@ -109,7 +115,9 @@ async def auth_callback(platform: str, code: str, state: str | None = None) -> d
     creds = await _auth_service.exchange_code(
         platform=pub_platform,
         code=code,
-        redirect_uri="https://app.example.com/callback",
+        # Use the caller-provided redirect_uri (must match the authorize
+        # request) or fall back to the legacy placeholder.
+        redirect_uri=redirect_uri or "https://app.example.com/callback",
     )
     return {
         "status": "success",
