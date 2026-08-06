@@ -39,8 +39,8 @@ AI-powered content repurposing tool that transforms one piece of content into 20
 - SSRF protection for safe API calls
 - Stripe billing integration with Free and Pro tiers
 - Railway cloud deployment
-- **Multi-Platform Auto-Publish** — Post to LinkedIn, Twitter/X, and Medium via API
-- **OAuth2 platform auth** — LinkedIn OAuth2, Twitter/X OAuth2 PKCE, Medium PAT
+- **Multi-Platform Auto-Publish** — Post to LinkedIn, Twitter/X, Medium, and Instagram via API
+- **OAuth2 platform auth** — LinkedIn OAuth2, Twitter/X OAuth2 PKCE, Medium PAT, Instagram OAuth2 (Meta Graph API)
 - **Per-platform rate limiting** — configurable token-bucket with automatic back-pressure
 - **Dry-run mode** — validate publish requests without posting
 - **Publish job tracking** — query publish status by job ID
@@ -606,6 +606,7 @@ Publish content directly to social platforms via a unified API. Supported platfo
 | **LinkedIn** | OAuth2 (`w_member_social`) | Text commentary, article links, image posts |
 | **Twitter / X** | OAuth2 PKCE (`tweet.write`, `users.read`, `offline.access`) | Single tweet, threaded tweets with media |
 | **Medium** | Personal Access Token | Draft or published articles (markdown) |
+| **Instagram** | OAuth2 (Meta Graph API: `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`) | Single image, carousel, reel |
 
 ### Dry-Run Mode
 
@@ -679,6 +680,28 @@ curl "https://repurposeai-production-d688.up.railway.app/publish/twitter/auth-ur
 curl -X PUT "https://repurposeai-production-d688.up.railway.app/publish/medium/credentials" \
   -H "Content-Type: application/json" \
   -d '{"platform": "medium", "access_token": "YOUR_PAT", "is_active": true}'
+```
+
+#### Instagram
+
+1. Create a **Meta for Developers** app (https://developers.facebook.com) and add the **Instagram Graph API** product.
+2. Link your Instagram Business (or Creator) account to the app and complete **App Review** for the required permissions (`instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`).
+3. Note your **Client ID** and **Client Secret** from the app dashboard and expose them to the deployment as `INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET` (the app resolves them from the environment at auth time).
+4. Get the auth URL:
+
+```bash
+curl "https://repurposeai-production-d688.up.railway.app/publish/instagram/auth-url?redirect_uri=https://yourapp.com/callback"
+```
+
+5. User authorizes → receive a `code` → exchange it via the callback endpoint (`POST /publish/instagram/callback`). The IG user ID returned with the token is stored as the publishing user.
+6. Publish with the container flow. `media_type` selects the flow (`IMAGE` default, `CAROUSEL`, `REELS`):
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/publish \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "instagram", "content": "Caption text", "media_urls": ["https://example.com/image.png"], "options": {"media_type": "IMAGE"}}'
+# Single image. Carousel: options.media_type="CAROUSEL" + options.children=[{image_url:...}, ...].
+# Reel: options.media_type="REELS" + options.video_url="https://example.com/reel.mp4".
 ```
 
 ### Rate Limiting

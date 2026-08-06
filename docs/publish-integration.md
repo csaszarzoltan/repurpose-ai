@@ -1,6 +1,6 @@
 # Multi-Platform Auto-Publish Integration Guide
 
-**RepurposeAI v0.6.0** — Publish content to LinkedIn, Twitter/X, and Medium via a unified API.
+**RepurposeAI** — Publish content to LinkedIn, Twitter/X, Medium, and Instagram via a unified API.
 
 ---
 
@@ -100,6 +100,8 @@ sequenceDiagram
 
 4. **Exchange Code** — Send the code to `POST /publish/{platform}/callback`. The API exchanges it for access and refresh tokens, stores them in memory, and returns the credential summary.
 
+Instagram follows the same authorization-code grant through Meta's OAuth dialog; the client id/secret come from `INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET` (see the [Platform Reference](#platform-reference) section below).
+
 ### Medium (PAT)
 
 Medium does not use OAuth2 for the built-in publishing API. Instead:
@@ -145,6 +147,18 @@ Medium does not use OAuth2 for the built-in publishing API. Instead:
 | **Publication posts** | Supports `publication_id` for posting to Medium publications |
 | **Rate limit** | Medium API standard limits apply |
 
+### Instagram
+
+| Property | Value |
+|----------|-------|
+| **API** | Meta Graph API v19.0 (container-based flow) |
+| **Auth** | OAuth2 via Meta OAuth dialog (env-configurable `INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET`) |
+| **Required scopes** | `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights` |
+| **Token refresh** | `fb_exchange_token` grant on the Graph API OAuth endpoint |
+| **Post types** | Single image (`IMAGE`, default), carousel (`CAROUSEL`), reel (`REELS`) |
+| **Payload** | Caption via `content`; media via `media_urls[0]` (image) or `options.video_url` (reel); `options.media_type` selects the flow; `options.children` (list of `{image_url: ...}`) for carousel items |
+| **Rate limit** | Meta Graph API standard limits apply; errors map to descriptive failures (rate limit, missing permission scope, app review required) |
+
 ---
 
 ## Error Codes
@@ -154,7 +168,7 @@ Medium does not use OAuth2 for the built-in publishing API. Instead:
 | HTTP Status | Error | Description |
 |-------------|-------|-------------|
 | **400** | Bad Request | Invalid publish request body or missing required fields |
-| **404** | Platform Not Found | Unknown platform name (supported: `linkedin`, `twitter`, `medium`) |
+| **404** | Platform Not Found | Unknown platform name (supported: `linkedin`, `twitter`, `medium`, `instagram`) |
 | **404** | Job Not Found | Publish job ID does not exist (expired or never created) |
 | **429** | Rate Limited | Per-platform rate limit exceeded (see [Rate Limiting](#rate-limiting)) |
 | **5xx** | Server Error | Downstream platform API error or internal failure |
@@ -178,6 +192,8 @@ Each publisher implements automatic retry with exponential backoff:
 | **429 Too Many Requests** | Respects `Retry-After` header, retries up to 3 times |
 | **5xx Server Error** | Retries with exponential backoff (0.5s → 1s → 2s) up to 3 times |
 | **Other 4xx** | Raises immediately — no retry (client error, won't succeed on replay) |
+
+Instagram publisher-specific errors (mapped from Meta Graph API `OAuthException` / error codes): rate-limit violations, missing permission scopes (including app-review-required), and expired-token cases (one refresh attempt via the `fb_exchange_token` grant).
 
 After exhausting retries the job status is set to `failed` and the last error message is included in the `errors` array.
 
@@ -205,6 +221,8 @@ When a platform exceeds its rate limit, the `POST /api/v1/publish` endpoint retu
 - **LinkedIn token refresh** — Limited to one refresh attempt per 401; if refresh fails, the request fails.
 - **Twitter thread posts** — Each tweet in a thread is posted sequentially; a failure mid-thread leaves partial state.
 - **Medium PAT only** — Medium does not support OAuth2 for the publishing API; only Personal Access Tokens are supported.
+- **Instagram Business/Creator account required** — publishing requires a linked Instagram Business (or Creator) account and Meta App Review approval for the content-publishing permissions; personal accounts cannot publish via the Graph API.
+- **Instagram reel support** — reels are published via the REELS media container with status polling; container failures surface as publish errors.
 
 ---
 
