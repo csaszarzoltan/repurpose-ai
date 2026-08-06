@@ -9,6 +9,7 @@ from app.models.publish import PublishPlatform, PublishRequest, PublishResponse
 
 if TYPE_CHECKING:
     from app.models.publish import PlatformCredentials
+    from app.services.publishers.instagram import InstagramPublisher
     from app.services.publishers.linkedin import LinkedInPublisher
     from app.services.publishers.medium import MediumPublisher
     from app.services.publishers.twitter import TwitterPublisher
@@ -30,11 +31,13 @@ class PublishService:
         linkedin: LinkedInPublisher | None = None,
         twitter: TwitterPublisher | None = None,
         medium: MediumPublisher | None = None,
+        instagram: InstagramPublisher | None = None,
     ) -> None:
         self._rate_limiter = rate_limiter
         self._linkedin = linkedin
         self._twitter = twitter
         self._medium = medium
+        self._instagram = instagram
         self._results: dict[str, PublishResponse] = {}
 
     async def publish(
@@ -130,6 +133,20 @@ class PublishService:
                 content=request.content,
             )
 
+        if request.platform == PublishPlatform.INSTAGRAM:
+            if self._instagram is None:
+                from app.services.publishers.instagram import InstagramPublisher
+
+                self._instagram = InstagramPublisher()
+            return await self._instagram.publish(
+                credentials=credentials,
+                image_url=request.media_urls[0] if request.media_urls else None,
+                video_url=request.options.get("video_url"),
+                media_type=request.options.get("media_type"),
+                children=request.options.get("children"),
+                caption=request.content,
+            )
+
         raise ValueError(f"Unsupported platform: {request.platform}")
 
     @staticmethod
@@ -141,4 +158,6 @@ class PublishService:
             return result.get("data", {}).get("id")
         if platform == PublishPlatform.MEDIUM:
             return result.get("data", {}).get("id")
+        if platform == PublishPlatform.INSTAGRAM:
+            return result.get("id")
         return None
