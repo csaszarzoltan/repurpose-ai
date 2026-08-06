@@ -14,6 +14,7 @@ class PublishPlatform(StrEnum):
     LINKEDIN = "linkedin"
     TWITTER = "twitter"
     MEDIUM = "medium"
+    INSTAGRAM = "instagram"
 
 
 class PlatformCredentials(BaseModel):

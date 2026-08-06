@@ -31,6 +31,13 @@ PLATFORM_AUTH_CONFIG: dict[str, dict[str, str]] = {
         "client_id": "medium_client_id",
         "scope": "basicProfile,listPublications,publishPost",
     },
+    "instagram": {
+        "auth_url": "https://www.facebook.com/v19.0/dialog/oauth",
+        "token_url": "https://graph.facebook.com/v19.0/oauth/access_token",
+        "revoke_url": "https://graph.facebook.com/v19.0/oauth/authorize",
+        "client_id": "",
+        "scope": "instagram_basic,instagram_content_publish,instagram_manage_insights",
+    },
 }
 
 

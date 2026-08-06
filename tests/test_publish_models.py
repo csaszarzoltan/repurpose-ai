@@ -53,13 +53,17 @@ class TestPublishPlatform:
         assert hasattr(PublishPlatform, "MEDIUM")
         assert PublishPlatform.MEDIUM == "medium"
 
+    def test_has_instagram(self):
+        assert hasattr(PublishPlatform, "INSTAGRAM")
+        assert PublishPlatform.INSTAGRAM == "instagram"
+
     def test_all_values_expected(self):
         values = {v.value for v in PublishPlatform}
-        assert values == {"linkedin", "twitter", "medium"}
+        assert values == {"linkedin", "twitter", "medium", "instagram"}
 
     def test_all_members_expected(self):
         members = set(PublishPlatform.__members__)
-        assert members == {"LINKEDIN", "TWITTER", "MEDIUM"}
+        assert members == {"LINKEDIN", "TWITTER", "MEDIUM", "INSTAGRAM"}
 
 
 # ════════════════════════════════════════════════════════════════════════════════
