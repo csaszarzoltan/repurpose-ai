@@ -1,6 +1,6 @@
-# Analytics Dashboard Examples
+# Examples
 
-Working Python scripts demonstrating all 7 analytics modules. Run from the repo root.
+Working Python scripts demonstrating analytics modules and platform publishing. Run from the repo root.
 
 ## Prerequisites
 
@@ -13,6 +13,8 @@ cd repurpose-ai
 
 | Script | Module | Description |
 |--------|--------|-------------|
+| `publish_wordpress.py` | Publish | WordPress REST API publisher: create_post, payload, excerpt derivation, site routing |
+| `publish_ghost.py` | Publish | Ghost Admin API publisher: create_post, payload, JWT auth, tag mapping |
 | `analytics_data_store.py` | P0.1 | DatabaseConnection, MetricsRepository, ValidationRepository, ScoreRepository, Migrator |
 | `analytics_performance.py` | P0.2 | MetricsCollector, PostMetrics, AnalyticsSummary |
 | `analytics_scoring.py` | P1.1 | ScoreCalculator, OptimizationScore |

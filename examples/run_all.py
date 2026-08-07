@@ -8,6 +8,8 @@ import subprocess
 import sys
 
 EXAMPLES = [
+    "publish_wordpress",
+    "publish_ghost",
     "analytics_data_store",
     "analytics_performance",
     "analytics_scoring",

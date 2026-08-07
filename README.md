@@ -39,8 +39,8 @@ AI-powered content repurposing tool that transforms one piece of content into 20
 - SSRF protection for safe API calls
 - Stripe billing integration with Free and Pro tiers
 - Railway cloud deployment
-- **Multi-Platform Auto-Publish** — Post to LinkedIn, Twitter/X, Medium, and Instagram via API
-- **OAuth2 platform auth** — LinkedIn OAuth2, Twitter/X OAuth2 PKCE, Medium PAT, Instagram OAuth2 (Meta Graph API)
+- **Multi-Platform Auto-Publish** — Post to LinkedIn, Twitter/X, Medium, Instagram, WordPress, and Ghost via API
+- **OAuth2 platform auth** — LinkedIn OAuth2, Twitter/X OAuth2 PKCE, Medium PAT, Instagram OAuth2 (Meta Graph API), WordPress.com OAuth2, Ghost Admin API key
 - **Per-platform rate limiting** — configurable token-bucket with automatic back-pressure
 - **Dry-run mode** — validate publish requests without posting
 - **Publish job tracking** — query publish status by job ID
@@ -99,6 +99,16 @@ RepurposeAI supports three LLM providers. Configure them via environment variabl
 
 At least one API key must be set for LLM-powered repurposing. Without any, the service falls back to string-concatenation (backward compatible).
 
+### Platform Publishing Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `WORDPRESS_CLIENT_ID` | For WordPress | — | WordPress.com OAuth2 application client ID |
+| `WORDPRESS_CLIENT_SECRET` | For WordPress | — | WordPress.com OAuth2 application client secret |
+| `INSTAGRAM_CLIENT_ID` | For Instagram | — | Meta (Facebook) app client ID |
+| `INSTAGRAM_CLIENT_SECRET` | For Instagram | — | Meta (Facebook) app client secret |
+
+Ghost uses Admin API key authentication (no OAuth) — store the key directly via `PUT /publish/ghost/credentials`. LinkedIn, Twitter/X, and Medium use per-user OAuth2 / PAT flows configured through the credentials API.
 ### Provider-Specific Details
 
 | Provider | SDK | Default Model | Fallback Order |
@@ -607,6 +617,8 @@ Publish content directly to social platforms via a unified API. Supported platfo
 | **Twitter / X** | OAuth2 PKCE (`tweet.write`, `users.read`, `offline.access`) | Single tweet, threaded tweets with media |
 | **Medium** | Personal Access Token | Draft or published articles (markdown) |
 | **Instagram** | OAuth2 (Meta Graph API: `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`) | Single image, carousel, reel |
+| **WordPress** | WordPress.com OAuth2 (`WORDPRESS_CLIENT_ID` / `WORDPRESS_CLIENT_SECRET`) | Post, page, draft, schedule (REST API `/wp-json/wp/v2`) |
+| **Ghost** | Admin API key (`id:secret`, JWT-signed) — no OAuth | Post, page, draft, schedule (Admin API `/ghost/api/admin`) |
 
 ### Dry-Run Mode
 
@@ -702,6 +714,55 @@ curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/publish \
   -d '{"platform": "instagram", "content": "Caption text", "media_urls": ["https://example.com/image.png"], "options": {"media_type": "IMAGE"}}'
 # Single image. Carousel: options.media_type="CAROUSEL" + options.children=[{image_url:...}, ...].
 # Reel: options.media_type="REELS" + options.video_url="https://example.com/reel.mp4".
+```
+
+#### WordPress
+
+1. Register an application at [WordPress.com Developer](https://developer.wordpress.com/apps)
+2. Set `WORDPRESS_CLIENT_ID` and `WORDPRESS_CLIENT_SECRET` in the environment
+3. Get the auth URL:
+
+```bash
+curl "https://repurposeai-production-d688.up.railway.app/publish/wordpress/auth-url?redirect_uri=https://yourapp.com/callback"
+# Returns the WP.com authorization URL with the `global` scope
+```
+
+4. User authorizes → receive a `code` → exchange it via the callback endpoint:
+
+```bash
+curl -X POST "https://repurposeai-production-d688.up.railway.app/publish/wordpress/callback?code=AUTH_CODE&state=..."
+# {"status":"success","platform":"wordpress","access_token":"..."}
+```
+
+5. Set `platform_user_id` to your site URL (e.g. `https://mysite.wordpress.com`) so the publisher targets the right REST API. Self-hosted sites using an OAuth plugin can set the token endpoint via `credentials.options["token_endpoint"]`.
+6. Publish content with status, categories, tags, featured image, and excerpt options:
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/publish \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "wordpress", "title": "My Post", "content": "Post body here.", "options": {"status": "draft", "categories": [1, 5], "tags": [10]}}'
+```
+
+#### Ghost
+
+1. In your Ghost Admin panel, go to **Settings → Integrations → Add custom integration**
+2. Copy the **Admin API Key** (format: `<id>:<secret>`)
+3. Store it directly via the credentials API (Ghost does not use OAuth):
+
+```bash
+curl -X PUT "https://repurposeai-production-d688.up.railway.app/publish/ghost/credentials" \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "ghost", "access_token": "YOUR_ADMIN_API_KEY", "is_active": true}'
+```
+
+> `GET /publish/ghost/auth-url` returns **400** — Ghost uses API key auth, not OAuth2.
+
+4. Publish content with status, tags, feature image, and mobiledoc options:
+
+```bash
+curl -X POST https://repurposeai-production-d688.up.railway.app/api/v1/publish \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "ghost", "title": "My Ghost Post", "content": "Post body here.", "options": {"status": "draft", "tags": [{"name": "tech"}, {"name": "ai"}], "feature_image": "https://example.com/image.png"}}'
 ```
 
 ### Rate Limiting
@@ -861,7 +922,7 @@ Additionally, the LLM layer handles provider-level rate limits gracefully via th
 ## Testing
 
 ```bash
-# Run all tests (1,204 total, all passing)
+# Run all tests (1,522 passed, 2 skipped, 10 xfailed)
 .venv/bin/python -m pytest tests/ -v
 
 # Run a specific test file
@@ -877,7 +938,7 @@ Additionally, the LLM layer handles provider-level rate limits gracefully via th
 .venv/bin/ruff check src/ tests/
 ```
 
-Tests: 1,204 total across 34 test files (all passing, 0 regressions). Includes:
+Tests: 1,522 total across 48 test files (2 skipped, 10 xfailed). Includes:
 
 | Test File | Tests | Area |
 |-----------|-------|------|
@@ -888,7 +949,18 @@ Tests: 1,204 total across 34 test files (all passing, 0 regressions). Includes:
 | `test_analytics_export.py` | 226 | CSV & PDF export |
 | `test_analytics_trends.py` | 233 | TrendService period-over-period deltas |
 | `test_analytics_performance.py` | 212 | Performance tracking & metric collection |
-| Other test files | ~973 | Auth, API keys, subscriptions, publish, workflows, LLM, webhooks |
+| `test_publishers_wordpress.py` | 38 | WordPress REST API publisher |
+| `test_publishers_ghost.py` | 37 | Ghost Admin API publisher |
+| `test_publish_api.py` | 24 | Publish API endpoint integration |
+| `test_publish_dispatch.py` | 13 | Publish dispatch routing |
+| `test_publish_models.py` | 48 | Publish Pydantic model validation |
+| `test_publish_platform.py` | 16 | Platform listing & credentials |
+| `test_platform_auth.py` | 25 | OAuth2 auth flow (all platforms) |
+| `test_publish_instagram.py` | — | Instagram Graph API publisher |
+| `test_publish_linkedin.py` | — | LinkedIn publisher |
+| `test_publish_medium.py` | — | Medium publisher |
+| `test_publish_twitter.py` | — | Twitter/X publisher |
+| Other test files | ~941 | Auth, API keys, subscriptions, workflows, LLM, webhooks |
 
 ## Project Structure
 
@@ -929,7 +1001,10 @@ repurpose-ai/
 │   │   ├── publishers/        # NEW: Platform publisher implementations
 │   │   │   ├── linkedin.py    # LinkedIn Posts API
 │   │   │   ├── twitter.py     # Twitter/X API v2
-│   │   │   └── medium.py      # Medium API v1
+│   │   │   ├── medium.py      # Medium API v1
+│   │   │   ├── instagram.py   # Instagram Graph API (container flow)
+│   │   │   ├── wordpress.py   # WordPress REST API (OAuth2)
+│   │   │   └── ghost.py       # Ghost Admin API (API key)
 │   │   ├── auth.py            # JWT, password hashing, user management
 │   │   ├── api_key.py         # API key generation, hashing, validation
 │   │   ├── repurpose.py       # Repurposing business logic (LLM-aware)

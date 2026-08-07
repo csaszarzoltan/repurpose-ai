@@ -3,6 +3,9 @@
 ## [Unreleased] - 2026-08-04
 
 ### Added
+- **WordPress CMS publishing** (WordPress REST API `/wp-json/wp/v2`): WordPress.com Application OAuth2 authentication (`GET /publish/wordpress/auth-url`, `POST /publish/wordpress/callback`); post, page, draft, publish, and scheduled (`future`) status; category and tag mapping; featured image upload via `options.featured_media`; auto-generated excerpt (first-paragraph summary ≤160 chars when not supplied); token refresh on 401 using env-configured `WORDPRESS_CLIENT_ID` / `WORDPRESS_CLIENT_SECRET` with site-derived or `options["token_endpoint"]` fallback. Self-hosted WordPress supported via an OAuth plugin + custom token endpoint.
+- **Ghost CMS publishing** (Ghost Admin API `/ghost/api/admin`): Admin API key authentication (`id:secret` JWT-signed, no OAuth — `GET /publish/ghost/auth-url` returns 400); post, page, draft, published, and scheduled status; tag mapping (`options.tags` as `[{name: ...}]`); featured image upload with SSRF guard (≤10 MB, content-type verified); Mobiledoc content formatting (`0.3.1` format with markdown card); JWT regeneration on 401 with 5-minute expiry.
+- WordPress/Ghost dispatch options forwarding: `POST /api/v1/publish` now passes `status`, `categories`, `tags`, `featured_media`, `excerpt` (WordPress) and `status`, `tags`, `feature_image`, `mobiledoc` (Ghost) through `request.options` to the publisher.
 - WordPress.com OAuth2 auth config: `GET /publish/wordpress/auth-url` now returns a real authorization URL (env: `WORDPRESS_CLIENT_ID` / `WORDPRESS_CLIENT_SECRET`) instead of a KeyError 500; Ghost (Admin API key, no OAuth) returns a clean 400 with a descriptive message.
 - Auth URLs now carry a random `state` (secrets.token_urlsafe) instead of a hardcoded placeholder.
 - WordPress excerpt generation (AC #3): `WordPressPublisher.create_post` accepts `excerpt` and derives a first-paragraph (≤160 chars) summary from the content when not supplied; dispatch forwards `options.excerpt`.
@@ -17,6 +20,12 @@
 - Multi-language repurposing: `POST /api/v1/repurpose` and per-job `POST /api/v1/repurpose/batch` accept an optional `target_languages` list of ISO 639-1 codes. When non-empty, every requested format's `repurposed` value becomes a `{lang_code: content}` mapping generated natively in each language via the existing LLM router (no external translation APIs); an empty list preserves the legacy single-language `{format: content}` shape. Unsupported codes are rejected with 422 on the single endpoint and mark the batch job failed.
 - New `GET /api/v1/languages` registry endpoint returning the 14 supported target languages as `{id, name, native_name}` with ISO 639-1 ids (`es`, `de`, `fr`, `pt`, `it`, `nl`, `ja`, `ko`, `zh`, `hi`, `ar`, `ru`, `pl`, `tr`).
 - Language-aware token estimation: the per-request LLM token estimate scales with the number of target languages and feeds the chunking decision.
+
+### Documentation
+- README updated with WordPress and Ghost in the feature list, platform comparison table, platform setup instructions (step-by-step for both WordPress OAuth2 and Ghost Admin API key), platform publishing environment variables, updated test counts (1,522), and expanded project structure (instagram.py, wordpress.py, ghost.py in publishers/).
+- `docs/publish-integration.md` updated with WordPress and Ghost platform reference tables, OAuth2/API key setup guides, and platform-specific error handling notes.
+- `examples/publish_wordpress.py` and `examples/publish_ghost.py` — working publish examples for both new platforms.
+- CHANGELOG updated with WordPress/Ghost CMS publishing feature entries, fix details, and documentation section.
 - `/repurpose` UI: language multi-select populated from the registry (native name/name, empty-state + retry on failure), `target_languages` included in the submit payload only when selected, and per-format per-language output tabs (legacy single-language view preserved when no languages are selected).
 
 ### Documentation
