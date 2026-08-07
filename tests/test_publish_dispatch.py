@@ -14,8 +14,8 @@ import pytest
 try:
     from app.models.publish import PlatformCredentials, PublishPlatform, PublishRequest
     from app.services.publish import PublishService
-    from app.services.publishers.wordpress import WordPressPublisher
     from app.services.publishers.ghost import GhostPublisher
+    from app.services.publishers.wordpress import WordPressPublisher
     HAS_DISPATCH = True
 except (ImportError, ModuleNotFoundError):
     HAS_DISPATCH = False
@@ -86,6 +86,37 @@ class TestDispatchWordpressRoute:
         service = PublishService()
         assert service._wordpress is None or isinstance(service._wordpress, WordPressPublisher)
 
+    async def test_wordpress_dispatch_forwards_options(self, credentials):
+        """Dispatch forwards options → status/categories/tags/featured_media (M1)."""
+        import respx
+
+        service = PublishService()
+        request = PublishRequest(
+            platform=PublishPlatform.WORDPRESS,
+            content="WP options test",
+            title="WP Options",
+            options={
+                "status": "publish",
+                "categories": [1, 5],
+                "tags": [10, 20],
+                "featured_media": "99",
+                "excerpt": "Short summary",
+            },
+        )
+        with respx.mock:
+            route = respx.post("https://example.wordpress.com/wp-json/wp/v2/posts").respond(
+                status_code=201,
+                json={"id": 301, "status": "publish"},
+            )
+            await service._publish_to_platform(request, credentials)
+        assert route.called
+        sent_json = route.calls[0].request.json()
+        assert sent_json["status"] == "publish"
+        assert sent_json["categories"] == [1, 5]
+        assert sent_json["tags"] == [10, 20]
+        assert sent_json["featured_media"] == "99"
+        assert sent_json["excerpt"] == "Short summary"
+
 
 @pytest.mark.xfail(not HAS_DISPATCH, reason="services/publish.py not implemented yet")
 class TestDispatchGhostRoute:
@@ -121,6 +152,36 @@ class TestDispatchGhostRoute:
         """PublishService auto-creates GhostPublisher when not injected."""
         service = PublishService()
         assert service._ghost is None or isinstance(service._ghost, GhostPublisher)
+
+    async def test_ghost_dispatch_forwards_options(self, credentials):
+        """Dispatch forwards options → status/tags/feature_image/mobiledoc (M1)."""
+        import respx
+
+        service = PublishService()
+        request = PublishRequest(
+            platform=PublishPlatform.GHOST,
+            content="Ghost options test",
+            title="Ghost Options",
+            options={
+                "status": "published",
+                "tags": [{"name": "tech"}],
+                "feature_image": "https://example.com/hero.jpg",
+                "mobiledoc": '{"version":"0.3.1"}',
+            },
+        )
+        with respx.mock:
+            route = respx.post("https://ghost.example.com/ghost/api/admin/posts/").respond(
+                status_code=201,
+                json={"posts": [{"id": "401", "status": "published"}]},
+            )
+            await service._publish_to_platform(request, credentials)
+        assert route.called
+        sent_json = route.calls[0].request.json()
+        post = sent_json["posts"][0]
+        assert post["status"] == "published"
+        assert post["tags"] == [{"name": "tech"}]
+        assert post["feature_image"] == "https://example.com/hero.jpg"
+        assert post["mobiledoc"] == '{"version":"0.3.1"}'
 
 
 # ════════════════════════════════════════════════════════════════════════════════

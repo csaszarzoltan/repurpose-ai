@@ -18,7 +18,7 @@ processing completes.
 │          │      202 { job_id, status_url }            │     AI       │
 │  (n8n /  │  ◀───────────────────────────────────────  │              │
 │  Zapier  │                                            │              │
-│  / Code) │     GET /status/{job_id} (poll loop)       │              │
+│  / Code) │     GET /api/v1/webhook/repurpose/status/{job_id} (poll loop)│              │
 │          │  ────────────────────────────────────────  │              │
 │          │      200 { status, result, ... }            │              │
 │          │  ◀───────────────────────────────────────  │              │
@@ -496,4 +496,4 @@ if __name__ == "__main__":
 
 | Date | Change |
 |------|--------|
-| 2026-07-24 | Initial webhook endpoints (`POST /api/v1/webhook/repurpose`, `GET /.../status/{job_id}`) added |
+| 2026-07-24 | Initial webhook endpoints (`POST /api/v1/webhook/repurpose`, `GET /api/v1/webhook/repurpose/status/{job_id}`) added |

@@ -9,7 +9,7 @@ from app.models.publish import (
     PublishRequest,
     PublishResponse,
 )
-from app.services.platform_auth import PlatformAuthService
+from app.services.platform_auth import PlatformAuthNotSupported, PlatformAuthService
 from app.services.publish import PublishService
 
 # Long-lived service instances (carry in-memory state)
@@ -92,7 +92,11 @@ async def get_auth_url(platform: str, redirect_uri: str) -> dict[str, str]:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Unknown platform: {platform}") from None
 
-    url = _auth_service.get_auth_url(pub_platform, redirect_uri)
+    try:
+        url = _auth_service.get_auth_url(pub_platform, redirect_uri)
+    except PlatformAuthNotSupported as exc:
+        # Platform uses API-key auth (e.g. Ghost) — a clean 400 beats a 500.
+        raise HTTPException(status_code=400, detail=str(exc)) from None
     return {"url": url, "auth_url": url, "platform": platform}
 
 

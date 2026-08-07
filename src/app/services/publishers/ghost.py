@@ -9,11 +9,18 @@ from typing import TYPE_CHECKING
 import httpx
 import jwt
 
+from app.services.ssrf import SSRFChecker
+
 if TYPE_CHECKING:
     from app.models.publish import PlatformCredentials
 
 GHOST_ADMIN_API = "https://ghost.example.com/ghost/api/admin"
 MAX_RETRIES = 3
+
+# Upload guardrails: max fetched image size (bytes) and fetch timeout.
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+IMAGE_FETCH_TIMEOUT = 15.0  # seconds
+_IMAGE_CONTENT_TYPES = ("image/", "application/octet-stream")
 
 
 class GhostPublisher:
@@ -101,16 +108,19 @@ class GhostPublisher:
     ) -> dict:
         """Upload an image to the Ghost media library.
 
-        Posts a multipart file to /ghost/api/admin/images/upload and returns
-        the created image reference. Retries on 401, 429, and 5xx.
+        Fetches the image bytes from ``image_url`` (SSRF-checked, bounded size,
+        content-type verified, timeout-limited), then posts them as a real
+        multipart file to /ghost/api/admin/images/upload. Retries on 401, 429,
+        and 5xx.
         """
         creds = deepcopy(credentials)
         jwt_token = await self._build_jwt(creds.access_token)
+        image_bytes, content_type, filename = await self._fetch_image(image_url, ref)
 
         for attempt in range(MAX_RETRIES + 1):
             headers = self._build_headers(jwt_token)
             files = {
-                "file": (ref or "image.jpg", image_url.encode("utf-8"), "image/jpeg"),
+                "file": (filename, image_bytes, content_type),
             }
 
             response = await self._http.post(
@@ -138,6 +148,29 @@ class GhostPublisher:
             response.raise_for_status()
 
         raise Exception(f"Ghost image upload failed after {MAX_RETRIES + 1} attempts")
+
+    async def _fetch_image(self, image_url: str, ref: str = "") -> tuple[bytes, str, str]:
+        """Fetch and validate image bytes from a URL.
+
+        Returns (bytes, content_type, filename). Raises ValueError for
+        non-image content, unreachable URLs, and oversized responses.
+        """
+        if not SSRFChecker().validate_url(image_url):
+            raise ValueError(f"Image URL blocked by SSRF guard: {image_url}")
+
+        async with httpx.AsyncClient(timeout=IMAGE_FETCH_TIMEOUT, follow_redirects=True) as client:
+            response = await client.get(image_url)
+        response.raise_for_status()
+
+        content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+        if not content_type.startswith(_IMAGE_CONTENT_TYPES):
+            raise ValueError(f"URL did not return an image (content-type: {content_type or 'unknown'})")
+
+        if len(response.content) > MAX_IMAGE_BYTES:
+            raise ValueError(f"Image exceeds the {MAX_IMAGE_BYTES // (1024 * 1024)} MB upload limit")
+
+        filename = ref or image_url.rsplit("/", 1)[-1].split("?", 1)[0] or "image.jpg"
+        return response.content, content_type, filename
 
     async def _build_jwt(self, api_key: str) -> str:
         """Build a signed JWT from the Ghost Admin API key.

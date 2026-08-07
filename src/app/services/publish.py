@@ -162,6 +162,11 @@ class PublishService:
                 credentials=credentials,
                 content=request.content,
                 title=request.title,
+                status=request.options.get("status", "draft"),
+                categories=request.options.get("categories"),
+                tags=request.options.get("tags"),
+                featured_media=request.options.get("featured_media"),
+                excerpt=request.options.get("excerpt"),
             )
 
         if request.platform == PublishPlatform.GHOST:
@@ -173,6 +178,10 @@ class PublishService:
                 credentials=credentials,
                 title=request.title or "",
                 content=request.content,
+                status=request.options.get("status", "draft"),
+                tags=request.options.get("tags"),
+                feature_image=request.options.get("feature_image"),
+                mobiledoc=request.options.get("mobiledoc"),
             )
 
         raise ValueError(f"Unsupported platform: {request.platform}")

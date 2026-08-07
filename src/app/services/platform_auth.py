@@ -2,12 +2,22 @@
 from __future__ import annotations
 
 import os
+import secrets
 from contextlib import suppress
 from datetime import datetime, timedelta
 
 import httpx
 
 from app.models.publish import PlatformCredentials, PublishPlatform
+
+
+class PlatformAuthNotSupportedError(Exception):
+    """Raised when a platform has no OAuth2 authorization flow (e.g. Ghost)."""
+
+
+# Backward-compatible alias (pre-N818 name).
+PlatformAuthNotSupported = PlatformAuthNotSupportedError
+
 
 # Platform OAuth2 configuration
 PLATFORM_AUTH_CONFIG: dict[str, dict[str, str]] = {
@@ -44,11 +54,39 @@ PLATFORM_AUTH_CONFIG: dict[str, dict[str, str]] = {
         "client_secret": "",
         "scope": "instagram_basic,instagram_content_publish,instagram_manage_insights",
     },
+    "wordpress": {
+        # WordPress.com Application OAuth2 (https://developer.wordpress.com/docs/oauth2/).
+        # Client id/secret are secrets — resolved from the environment at auth
+        # time (WORDPRESS_CLIENT_ID / WORDPRESS_CLIENT_SECRET), mirroring the
+        # Instagram pattern below. Placeholders keep the authorize URL
+        # well-formed before credentials are configured.
+        "auth_url": "https://public-api.wordpress.com/oauth2/authorize",
+        "token_url": "https://public-api.wordpress.com/oauth2/token",
+        "revoke_url": "https://public-api.wordpress.com/oauth2/token",
+        "client_id": "",
+        "client_secret": "",
+        "scope": "global",
+    },
+    "ghost": {
+        # Ghost uses Admin API keys (JWT-signed), not OAuth2 — there is no
+        # authorization URL. `get_auth_url` raises PlatformAuthNotSupported
+        # for this platform; the API layer maps it to a clean 400.
+        "auth_url": "",
+        "token_url": "",
+        "revoke_url": "",
+        "client_id": "",
+        "client_secret": "",
+        "scope": "",
+    },
 }
 
 # Env vars that supply real OAuth credentials for Instagram (Meta app).
 _INSTAGRAM_CLIENT_ID = os.getenv("INSTAGRAM_CLIENT_ID", "")
 _INSTAGRAM_CLIENT_SECRET = os.getenv("INSTAGRAM_CLIENT_SECRET", "")
+
+# Env vars that supply real OAuth credentials for WordPress.com apps.
+_WORDPRESS_CLIENT_ID = os.getenv("WORDPRESS_CLIENT_ID", "")
+_WORDPRESS_CLIENT_SECRET = os.getenv("WORDPRESS_CLIENT_SECRET", "")
 
 
 def _instagram_config() -> dict[str, str]:
@@ -59,6 +97,25 @@ def _instagram_config() -> dict[str, str]:
     if _INSTAGRAM_CLIENT_SECRET:
         cfg["client_secret"] = _INSTAGRAM_CLIENT_SECRET
     return cfg
+
+
+def _wordpress_config() -> dict[str, str]:
+    """Resolve the effective WordPress OAuth config (env override)."""
+    cfg = dict(PLATFORM_AUTH_CONFIG["wordpress"])
+    if _WORDPRESS_CLIENT_ID:
+        cfg["client_id"] = _WORDPRESS_CLIENT_ID
+    if _WORDPRESS_CLIENT_SECRET:
+        cfg["client_secret"] = _WORDPRESS_CLIENT_SECRET
+    return cfg
+
+
+def _platform_config(platform: PublishPlatform) -> dict[str, str]:
+    """Return the effective auth config for a platform (env-aware)."""
+    if platform is PublishPlatform.INSTAGRAM:
+        return _instagram_config()
+    if platform is PublishPlatform.WORDPRESS:
+        return _wordpress_config()
+    return PLATFORM_AUTH_CONFIG[platform.value]
 
 
 class PlatformAuthService:
@@ -75,18 +132,22 @@ class PlatformAuthService:
     # ── Auth URL generation (sync, no HTTP call) ────────────────────────────
 
     def get_auth_url(self, platform: PublishPlatform, redirect_uri: str) -> str:
-        """Generate the OAuth2 authorization URL for a platform."""
-        config = (
-            _instagram_config()
-            if platform is PublishPlatform.INSTAGRAM
-            else PLATFORM_AUTH_CONFIG[platform.value]
-        )
+        """Generate the OAuth2 authorization URL for a platform.
+
+        Raises PlatformAuthNotSupported for platforms without an OAuth2
+        authorization flow (e.g. Ghost, which uses Admin API keys).
+        """
+        config = _platform_config(platform)
+        if not config["auth_url"]:
+            raise PlatformAuthNotSupported(
+                f"{platform.value} does not use OAuth2 — configure an API key instead (see /publish/{platform.value}/credentials)"
+            )
         params = {
             "response_type": "code",
             "client_id": config["client_id"],
             "redirect_uri": redirect_uri,
             "scope": config["scope"],
-            "state": "state_placeholder",
+            "state": secrets.token_urlsafe(32),
         }
         query = "&".join(f"{k}={v}" for k, v in params.items())
         return f"{config['auth_url']}?{query}"
@@ -100,11 +161,7 @@ class PlatformAuthService:
         redirect_uri: str,
     ) -> PlatformCredentials:
         """Exchange an authorization code for access+refresh tokens."""
-        config = (
-            _instagram_config()
-            if platform is PublishPlatform.INSTAGRAM
-            else PLATFORM_AUTH_CONFIG[platform.value]
-        )
+        config = _platform_config(platform)
         data = {
             "grant_type": "authorization_code",
             "code": code,
@@ -136,11 +193,7 @@ class PlatformAuthService:
 
     async def refresh_credentials(self, credentials: PlatformCredentials) -> PlatformCredentials:
         """Refresh an expired token using its refresh token."""
-        config = (
-            _instagram_config()
-            if credentials.platform is PublishPlatform.INSTAGRAM
-            else PLATFORM_AUTH_CONFIG[credentials.platform.value]
-        )
+        config = _platform_config(credentials.platform)
         data = {
             "grant_type": "refresh_token",
             "refresh_token": credentials.refresh_token or "",
@@ -166,11 +219,7 @@ class PlatformAuthService:
 
     async def revoke_credentials(self, platform: PublishPlatform) -> None:
         """Revoke tokens and remove stored credentials."""
-        config = (
-            _instagram_config()
-            if platform is PublishPlatform.INSTAGRAM
-            else PLATFORM_AUTH_CONFIG[platform.value]
-        )
+        config = _platform_config(platform)
         data = {
             "token": "",
             "client_id": config["client_id"],

@@ -126,6 +126,22 @@ class TestPlatformCredentialsInterface:
         )
         assert creds.is_active is False
 
+    def test_options_defaults_empty(self):
+        creds = PlatformCredentials(
+            platform=PublishPlatform.WORDPRESS,
+            access_token="tok_abc123",
+        )
+        assert creds.options == {}
+
+    def test_options_with_values(self):
+        creds = PlatformCredentials(
+            platform=PublishPlatform.WORDPRESS,
+            access_token="tok_abc123",
+            platform_user_id="https://example.com",
+            options={"token_endpoint": "https://example.com/oauth/token"},
+        )
+        assert creds.options["token_endpoint"] == "https://example.com/oauth/token"
+
     def test_missing_platform_raises(self):
         with pytest.raises(ValidationError):
             PlatformCredentials(access_token="tok_abc123")

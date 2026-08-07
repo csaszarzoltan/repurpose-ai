@@ -3,6 +3,16 @@
 ## [Unreleased] - 2026-08-04
 
 ### Added
+- WordPress.com OAuth2 auth config: `GET /publish/wordpress/auth-url` now returns a real authorization URL (env: `WORDPRESS_CLIENT_ID` / `WORDPRESS_CLIENT_SECRET`) instead of a KeyError 500; Ghost (Admin API key, no OAuth) returns a clean 400 with a descriptive message.
+- Auth URLs now carry a random `state` (secrets.token_urlsafe) instead of a hardcoded placeholder.
+- WordPress excerpt generation (AC #3): `WordPressPublisher.create_post` accepts `excerpt` and derives a first-paragraph (≤160 chars) summary from the content when not supplied; dispatch forwards `options.excerpt`.
+- `PlatformCredentials.options` (dict) for per-credential configuration (e.g. WordPress token endpoint).
+
+### Fixed
+- WordPress OAuth refresh (B2): `refresh_token` now resolves client id/secret from `WORDPRESS_CLIENT_ID` / `WORDPRESS_CLIENT_SECRET` (no hardcoded placeholders) and derives the token endpoint from the site URL (`credentials.platform_user_id`), `credentials.options["token_endpoint"]`, or the WP.com default — the broken `/wp-json/wp/v2` string-replace derivation is gone.
+- Ghost image upload (B3): `upload_image` now fetches the image bytes (SSRF-checked, ≤10 MB, content-type verified, timeout-limited) and posts a real multipart file; non-image / unreachable URLs raise descriptive errors.
+- Dispatch options plumbing (M1): `_publish_to_platform` forwards `status`/`categories`/`tags`/`featured_media`/`excerpt` (WordPress) and `status`/`tags`/`feature_image`/`mobiledoc` (Ghost) from `request.options` — draft/publish/schedule is now reachable via the API.
+- WordPress 401-retry path uses the site-derived token URL consistently.
 - feat(instagram): add Instagram publisher with OAuth2 + Graph API content publishing. `POST /api/v1/publish` with `platform: "instagram"` dispatches through the new `InstagramPublisher` (Meta Graph API v19.0, container-based flow). Supported content types: single image (`IMAGE`, default), carousel (`CAROUSEL`, per-item containers → CAROUSEL container → publish), and reel (`REELS`, video container + status polling → publish). Connection requires a Meta (Facebook) app: OAuth2 via `GET /publish/instagram/auth-url` + `POST /publish/instagram/callback` with scopes `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`; client id/secret are env-configurable (`INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET`). Long-lived token refresh uses the Graph API `fb_exchange_token` grant. Rate-limit, permission-scope, and app-review-required API errors map to descriptive failures; tokens are never logged.
 - Multi-language repurposing: `POST /api/v1/repurpose` and per-job `POST /api/v1/repurpose/batch` accept an optional `target_languages` list of ISO 639-1 codes. When non-empty, every requested format's `repurposed` value becomes a `{lang_code: content}` mapping generated natively in each language via the existing LLM router (no external translation APIs); an empty list preserves the legacy single-language `{format: content}` shape. Unsupported codes are rejected with 422 on the single endpoint and mark the batch job failed.
 - New `GET /api/v1/languages` registry endpoint returning the 14 supported target languages as `{id, name, native_name}` with ISO 639-1 ids (`es`, `de`, `fr`, `pt`, `it`, `nl`, `ja`, `ko`, `zh`, `hi`, `ar`, `ru`, `pl`, `tr`).
@@ -193,9 +203,9 @@ All notable changes to RepurposeAI will be documented in this file.
 ### Added
 
 - **Multi-Platform Auto-Publish**:
-  - Post content to LinkedIn via OAuth2 (`POST /rest/posts`)
-  - Post to Twitter/X via OAuth2 (`POST /2/tweets`, thread support)
-  - Post to Medium via Personal Access Token (`POST /v1/users/{id}/posts`, markdown)
+  - Post content to LinkedIn via OAuth2 (`POST https://api.linkedin.com/rest/posts`)
+  - Post to Twitter/X via OAuth2 (`POST https://api.twitter.com/2/tweets`, thread support)
+  - Post to Medium via Personal Access Token (`POST https://api.medium.com/v1/users/{id}/posts`, markdown)
   - `PublishService` orchestrator dispatching to the correct platform publisher
   - Dry-run mode for safe testing without actually posting
   - Job tracking with `GET /api/v1/publish/{job_id}` status endpoint

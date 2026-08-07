@@ -209,6 +209,29 @@ class TestPublishAuthEndpoints:
         url = data.get("url", data.get("auth_url", ""))
         assert "linkedin" in str(url).lower()
 
+    async def test_wordpress_auth_url_returns_200(self):
+        """GET /publish/wordpress/auth-url returns 200 (B1 — was a KeyError 500)."""
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                "/publish/wordpress/auth-url",
+                params={"redirect_uri": "https://app.example.com/callback"},
+            )
+        assert response.status_code == 200
+        data = response.json()
+        url = data.get("url", data.get("auth_url", ""))
+        assert "wordpress.com" in str(url).lower()
+
+    async def test_ghost_auth_url_returns_clean_error(self):
+        """GET /publish/ghost/auth-url returns a clean 400 (B1 — was a KeyError 500)."""
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                "/publish/ghost/auth-url",
+                params={"redirect_uri": "https://app.example.com/callback"},
+            )
+        assert response.status_code == 400
+        data = response.json()
+        assert "ghost" in str(data.get("detail", "")).lower()
+
     async def test_auth_callback_returns_200(self):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             with respx.mock:

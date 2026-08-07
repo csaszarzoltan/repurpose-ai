@@ -344,6 +344,11 @@ class TestGhostPublisherUploadImage:
     async def test_upload_image_returns_image_data(self, publisher, credentials):
         """POST /ghost/api/admin/images/upload returns image reference."""
         with respx.mock:
+            respx.get("https://example.com/photo.jpg").respond(
+                status_code=200,
+                content=b"\x89PNG\r\n\x1a\nfake-bytes",
+                headers={"Content-Type": "image/png"},
+            )
             route = respx.post(f"{GHOST_API}/images/upload").respond(
                 status_code=201,
                 json={"images": [{"url": "https://ghost.example.com/content/images/2026/08/photo.jpg", "ref": "photo-ref"}]},
@@ -354,6 +359,52 @@ class TestGhostPublisherUploadImage:
             )
         assert route.called
         assert "images" in result
+
+    async def test_upload_image_sends_fetched_bytes(self, publisher, credentials):
+        """upload_image sends the fetched image bytes, not the URL string (B3)."""
+        with respx.mock:
+            respx.get("https://example.com/photo.jpg").respond(
+                status_code=200,
+                content=b"\x89PNG\r\n\x1a\nreal-bytes-123",
+                headers={"Content-Type": "image/png"},
+            )
+            route = respx.post(f"{GHOST_API}/images/upload").respond(
+                status_code=201,
+                json={"images": [{"url": "https://ghost.example.com/img.jpg"}]},
+            )
+            await publisher.upload_image(
+                credentials=credentials,
+                image_url="https://example.com/photo.jpg",
+            )
+        assert route.called
+        body = route.calls[0].request.content
+        # multipart body must contain the fetched bytes, not the URL text
+        assert b"real-bytes-123" in body
+        assert b"https://example.com/photo.jpg" not in body
+
+    async def test_upload_image_rejects_non_image(self, publisher, credentials):
+        """Non-image content-type raises a clean error (B3 error path)."""
+        with respx.mock:
+            respx.get("https://example.com/page.html").respond(
+                status_code=200,
+                content=b"<html>not an image</html>",
+                headers={"Content-Type": "text/html"},
+            )
+            with pytest.raises(Exception, match="image"):
+                await publisher.upload_image(
+                    credentials=credentials,
+                    image_url="https://example.com/page.html",
+                )
+
+    async def test_upload_image_unreachable_url_raises(self, publisher, credentials):
+        """Unreachable image URL raises a clean error (B3 error path)."""
+        with respx.mock:
+            respx.get("https://example.com/missing.jpg").respond(status_code=404)
+            with pytest.raises(Exception, match="image|fetch|404"):
+                await publisher.upload_image(
+                    credentials=credentials,
+                    image_url="https://example.com/missing.jpg",
+                )
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -420,7 +471,7 @@ class TestGhostPublisherServerError:
                 status_code=500,
                 json={"errors": [{"message": "Internal server error"}]},
             )
-            with pytest.raises(Exception):
+            with pytest.raises(Exception, match="500 Internal Server Error"):
                 await publisher.create_post(
                     credentials=credentials,
                     title="Error Post",

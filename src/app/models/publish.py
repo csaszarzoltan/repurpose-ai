@@ -27,6 +27,7 @@ class PlatformCredentials(BaseModel):
     refresh_token: str | None = None
     token_expiry: datetime | None = None
     platform_user_id: str | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
     is_active: bool = True
 
 

@@ -14,6 +14,9 @@ import respx
 
 try:
     from app.models.publish import PlatformCredentials, PublishPlatform
+    from app.services.platform_auth import (
+        PlatformAuthNotSupported as PlatformAuthNotSupportedError,
+    )
     from app.services.platform_auth import PlatformAuthService
 
     HAS_PLATFORM_AUTH = True
@@ -24,8 +27,13 @@ except (ImportError, ModuleNotFoundError):
         LINKEDIN = "linkedin"
         TWITTER = "twitter"
         MEDIUM = "medium"
+        WORDPRESS = "wordpress"
+        GHOST = "ghost"
 
     class PlatformCredentials:  # type: ignore[no-redef]
+        pass
+
+    class PlatformAuthNotSupportedError(Exception):  # type: ignore[no-redef]
         pass
 
 
@@ -120,6 +128,32 @@ class TestPlatformAuthUrl:
         redirect = "https://myapp.com/oauth/callback"
         url = auth_service.get_auth_url(PublishPlatform.LINKEDIN, redirect)
         assert redirect in url or redirect.replace("https://", "") in url.replace("https://", "")
+
+    def test_wordpress_auth_url(self, auth_service):
+        """WordPress returns a WP.com OAuth2 authorization URL (B1)."""
+        url = auth_service.get_auth_url(PublishPlatform.WORDPRESS, "https://app.example.com/callback")
+        assert "wordpress.com" in url.lower()
+        assert "redirect_uri" in url
+        assert "client_id" in url
+
+    def test_auth_url_state_is_random(self, auth_service):
+        """Auth URLs carry a real random state, not the placeholder (M3)."""
+        url1 = auth_service.get_auth_url(PublishPlatform.LINKEDIN, "https://app.example.com/callback")
+        url2 = auth_service.get_auth_url(PublishPlatform.LINKEDIN, "https://app.example.com/callback")
+        assert "state_placeholder" not in url1
+        assert "state_placeholder" not in url2
+        assert url1 != url2
+        # state values are base64url-ish (secrets.token_urlsafe output)
+        import re
+
+        state1 = re.search(r"[?&]state=([^&]+)", url1)
+        assert state1 is not None
+        assert re.fullmatch(r"[A-Za-z0-9_-]+", state1.group(1))
+
+    def test_ghost_auth_url_not_supported(self, auth_service):
+        """Ghost uses an Admin API key (no OAuth): get_auth_url raises (B1)."""
+        with pytest.raises(PlatformAuthNotSupportedError):
+            auth_service.get_auth_url(PublishPlatform.GHOST, "https://app.example.com/callback")
 
 
 # ════════════════════════════════════════════════════════════════════════════════

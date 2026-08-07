@@ -119,6 +119,12 @@ class TestWordPressPublisherInterface:
         sig = inspect.signature(WordPressPublisher.create_post)
         assert "credentials" in sig.parameters
 
+    def test_create_post_has_excerpt_param(self):
+        """create_post accepts an excerpt for AC #3 excerpt generation (M2)."""
+        import inspect
+        sig = inspect.signature(WordPressPublisher.create_post)
+        assert "excerpt" in sig.parameters
+
     def test_retry_after_is_static(self):
         assert hasattr(WordPressPublisher, "_get_retry_after")
 
@@ -201,7 +207,7 @@ class TestWordPressPublisherCreatePost:
                 status_code=201,
                 json={"id": 45, "featured_media": 99},
             )
-            result = await publisher.create_post(
+            await publisher.create_post(
                 credentials=credentials,
                 content="Image post",
                 featured_media="99",
@@ -258,6 +264,37 @@ class TestWordPressPublisherCreatePost:
         sent_json = route.calls[0].request.json()
         assert sent_json.get("status") == "future"
 
+    async def test_create_post_with_explicit_excerpt(self, publisher, credentials):
+        """An explicit excerpt is sent in the payload (M2)."""
+        with respx.mock:
+            route = respx.post(f"{WORDPRESS_API}/posts").respond(
+                status_code=201,
+                json={"id": 49, "status": "draft"},
+            )
+            await publisher.create_post(
+                credentials=credentials,
+                content="Post body",
+                excerpt="A short summary",
+            )
+        assert route.called
+        sent_json = route.calls[0].request.json()
+        assert sent_json.get("excerpt") == "A short summary"
+
+    async def test_create_post_derives_excerpt_from_content(self, publisher, credentials):
+        """Without an explicit excerpt, one is derived from the content (M2)."""
+        with respx.mock:
+            route = respx.post(f"{WORDPRESS_API}/posts").respond(
+                status_code=201,
+                json={"id": 50, "status": "draft"},
+            )
+            long_content = "First paragraph of the post.\n\nSecond paragraph with more text."
+            await publisher.create_post(credentials=credentials, content=long_content)
+        assert route.called
+        sent_json = route.calls[0].request.json()
+        excerpt = sent_json.get("excerpt")
+        assert excerpt
+        assert excerpt.startswith("First paragraph of the post")
+
 
 # ════════════════════════════════════════════════════════════════════════════════
 # BEHAVIORAL TESTS — Auth failure + OAuth2 refresh
@@ -274,6 +311,7 @@ class TestWordPressPublisherAuth:
             platform=PublishPlatform.WORDPRESS,
             access_token="expired_token",
             refresh_token="refresh_xyz",
+            platform_user_id="https://example.wordpress.com",
         )
 
     @pytest.fixture
@@ -309,6 +347,82 @@ class TestWordPressPublisherAuth:
         assert auth_called, "OAuth2 token refresh should have been called"
         assert result["id"] == 50
 
+    async def test_refresh_uses_env_client_credentials(self, publisher, monkeypatch):
+        """refresh_token resolves client_id/secret from env, not placeholders (B2)."""
+        monkeypatch.setenv("WORDPRESS_CLIENT_ID", "env_client_123")
+        monkeypatch.setenv("WORDPRESS_CLIENT_SECRET", "env_secret_456")
+        creds = PlatformCredentials(
+            platform=PublishPlatform.WORDPRESS,
+            access_token="expired",
+            refresh_token="refresh_env",
+            platform_user_id="https://example.wordpress.com",
+        )
+
+        async def _refresh_handler(request):
+            return httpx.Response(
+                status_code=200,
+                json={"access_token": "fresh_from_env", "token_type": "bearer"},
+            )
+
+        with respx.mock:
+            route = respx.post("https://example.wordpress.com/oauth/token").mock(
+                side_effect=_refresh_handler,
+            )
+            result = await publisher.refresh_token(creds)
+        assert route.called
+        sent = route.calls[0].request
+        body = sent.content.decode()
+        assert "env_client_123" in body
+        assert "env_secret_456" in body
+        assert "wordpress_client_id" not in body
+        assert "client_secret_placeholder" not in body
+        assert result.access_token == "fresh_from_env"
+
+    async def test_refresh_token_url_from_site(self, publisher):
+        """refresh_token derives the token URL from the site URL (B2)."""
+        creds = PlatformCredentials(
+            platform=PublishPlatform.WORDPRESS,
+            access_token="expired",
+            refresh_token="refresh_rt",
+            platform_user_id="https://mysite.example.com",
+        )
+
+        async def _refresh_handler(request):
+            return httpx.Response(
+                status_code=200,
+                json={"access_token": "fresh", "token_type": "bearer"},
+            )
+
+        with respx.mock:
+            route = respx.post("https://mysite.example.com/oauth/token").mock(
+                side_effect=_refresh_handler,
+            )
+            await publisher.refresh_token(creds)
+        assert route.called
+
+    async def test_refresh_token_url_from_options(self, publisher):
+        """refresh_token prefers the token endpoint in credentials.options (B2)."""
+        creds = PlatformCredentials(
+            platform=PublishPlatform.WORDPRESS,
+            access_token="expired",
+            refresh_token="refresh_opts",
+            platform_user_id="https://site.example.com",
+            options={"token_endpoint": "https://auth.example.com/oauth2/token"},
+        )
+
+        async def _refresh_handler(request):
+            return httpx.Response(
+                status_code=200,
+                json={"access_token": "fresh_opts", "token_type": "bearer"},
+            )
+
+        with respx.mock:
+            route = respx.post("https://auth.example.com/oauth2/token").mock(
+                side_effect=_refresh_handler,
+            )
+            await publisher.refresh_token(creds)
+        assert route.called
+
     async def test_auth_without_refresh_token_raises(self, publisher, credentials_no_refresh):
         """401 without refresh_token raises immediately."""
         with respx.mock:
@@ -316,7 +430,7 @@ class TestWordPressPublisherAuth:
                 status_code=401,
                 json={"code": "rest_cookie_invalid_nonce", "message": "Unauthorized"},
             )
-            with pytest.raises(Exception):
+            with pytest.raises(Exception, match="WordPress post failed|401"):
                 await publisher.create_post(
                     credentials=credentials_no_refresh,
                     content="No refresh available",
@@ -348,7 +462,11 @@ class TestWordPressPublisherRateLimit:
         with respx.mock:
             respx.post(f"{WORDPRESS_API}/posts").mock(
                 side_effect=[
-                    httpx.Response(429, json={"code": "rate_limit_exceeded", "message": "Too many requests"}, headers={"Retry-After": "1"}),
+                    httpx.Response(
+                        429,
+                        json={"code": "rate_limit_exceeded", "message": "Too many requests"},
+                        headers={"Retry-After": "1"},
+                    ),
                     httpx.Response(201, json={"id": 51, "status": "draft"}),
                 ]
             )
@@ -382,7 +500,7 @@ class TestWordPressPublisherUploadImage:
     async def test_upload_image_returns_media_id(self, publisher, credentials):
         """POST /wp-json/wp/v2/media returns attachment data."""
         with respx.mock:
-            route = respx.post(f"https://example.wordpress.com/wp-json/wp/v2/media").respond(
+            route = respx.post("https://example.wordpress.com/wp-json/wp/v2/media").respond(
                 status_code=201,
                 json={"id": 101, "source_url": "https://example.wordpress.com/wp-content/uploads/2026/08/img.jpg"},
             )
@@ -397,7 +515,7 @@ class TestWordPressPublisherUploadImage:
     async def test_upload_image_with_alt_text(self, publisher, credentials):
         """Alt text is sent in the upload payload."""
         with respx.mock:
-            route = respx.post(f"https://example.wordpress.com/wp-json/wp/v2/media").respond(
+            route = respx.post("https://example.wordpress.com/wp-json/wp/v2/media").respond(
                 status_code=201,
                 json={"id": 102, "source_url": "https://example.wordpress.com/img.jpg"},
             )
@@ -438,7 +556,7 @@ class TestWordPressPublisherServerError:
                 status_code=500,
                 json={"code": "internal_server_error", "message": "Something went wrong"},
             )
-            with pytest.raises(Exception):
+            with pytest.raises(Exception, match="500 Internal Server Error"):
                 await publisher.create_post(
                     credentials=credentials,
                     content="Server error test",
