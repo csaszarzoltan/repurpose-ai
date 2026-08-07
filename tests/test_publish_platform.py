@@ -66,8 +66,8 @@ class TestPublishPlatformEnum:
         assert PublishPlatform.MEDIUM == "medium"
 
     def test_all_expected_members(self):
-        """PublishPlatform has all 5 expected members."""
-        expected = {"LINKEDIN", "TWITTER", "MEDIUM", "WORDPRESS", "GHOST"}
+        """PublishPlatform has all 6 expected members (including Instagram)."""
+        expected = {"LINKEDIN", "TWITTER", "MEDIUM", "INSTAGRAM", "WORDPRESS", "GHOST"}
         actual = {m.name for m in PublishPlatform}
         assert expected == actual
 
