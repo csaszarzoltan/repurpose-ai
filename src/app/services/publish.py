@@ -9,12 +9,12 @@ from app.models.publish import PublishPlatform, PublishRequest, PublishResponse
 
 if TYPE_CHECKING:
     from app.models.publish import PlatformCredentials
+    from app.services.publishers.ghost import GhostPublisher
     from app.services.publishers.instagram import InstagramPublisher
     from app.services.publishers.linkedin import LinkedInPublisher
     from app.services.publishers.medium import MediumPublisher
     from app.services.publishers.twitter import TwitterPublisher
     from app.services.publishers.wordpress import WordPressPublisher
-    from app.services.publishers.ghost import GhostPublisher
     from app.services.rate_limiter import RateLimiter
 
 MAX_RETRIES = 3

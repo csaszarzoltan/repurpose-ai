@@ -59,11 +59,11 @@ class TestPublishPlatform:
 
     def test_all_values_expected(self):
         values = {v.value for v in PublishPlatform}
-        assert values == {"linkedin", "twitter", "medium", "instagram"}
+        assert values == {"linkedin", "twitter", "medium", "instagram", "wordpress", "ghost"}
 
     def test_all_members_expected(self):
         members = set(PublishPlatform.__members__)
-        assert members == {"LINKEDIN", "TWITTER", "MEDIUM", "INSTAGRAM"}
+        assert members == {"LINKEDIN", "TWITTER", "MEDIUM", "INSTAGRAM", "WORDPRESS", "GHOST"}
 
 
 # ════════════════════════════════════════════════════════════════════════════════
