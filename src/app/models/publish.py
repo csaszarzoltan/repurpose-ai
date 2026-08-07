@@ -15,6 +15,8 @@ class PublishPlatform(StrEnum):
     TWITTER = "twitter"
     MEDIUM = "medium"
     INSTAGRAM = "instagram"
+    WORDPRESS = "wordpress"
+    GHOST = "ghost"
 
 
 class PlatformCredentials(BaseModel):

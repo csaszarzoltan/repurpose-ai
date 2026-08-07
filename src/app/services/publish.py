@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from app.services.publishers.linkedin import LinkedInPublisher
     from app.services.publishers.medium import MediumPublisher
     from app.services.publishers.twitter import TwitterPublisher
+    from app.services.publishers.wordpress import WordPressPublisher
+    from app.services.publishers.ghost import GhostPublisher
     from app.services.rate_limiter import RateLimiter
 
 MAX_RETRIES = 3
@@ -32,12 +34,16 @@ class PublishService:
         twitter: TwitterPublisher | None = None,
         medium: MediumPublisher | None = None,
         instagram: InstagramPublisher | None = None,
+        wordpress: WordPressPublisher | None = None,
+        ghost: GhostPublisher | None = None,
     ) -> None:
         self._rate_limiter = rate_limiter
         self._linkedin = linkedin
         self._twitter = twitter
         self._medium = medium
         self._instagram = instagram
+        self._wordpress = wordpress
+        self._ghost = ghost
         self._results: dict[str, PublishResponse] = {}
 
     async def publish(
@@ -147,6 +153,28 @@ class PublishService:
                 caption=request.content,
             )
 
+        if request.platform == PublishPlatform.WORDPRESS:
+            if self._wordpress is None:
+                from app.services.publishers.wordpress import WordPressPublisher
+
+                self._wordpress = WordPressPublisher()
+            return await self._wordpress.create_post(
+                credentials=credentials,
+                content=request.content,
+                title=request.title,
+            )
+
+        if request.platform == PublishPlatform.GHOST:
+            if self._ghost is None:
+                from app.services.publishers.ghost import GhostPublisher
+
+                self._ghost = GhostPublisher()
+            return await self._ghost.create_post(
+                credentials=credentials,
+                title=request.title or "",
+                content=request.content,
+            )
+
         raise ValueError(f"Unsupported platform: {request.platform}")
 
     @staticmethod
@@ -160,4 +188,10 @@ class PublishService:
             return result.get("data", {}).get("id")
         if platform == PublishPlatform.INSTAGRAM:
             return result.get("id")
+        if platform == PublishPlatform.WORDPRESS:
+            return result.get("id")
+        if platform == PublishPlatform.GHOST:
+            posts = result.get("posts", [])
+            if posts:
+                return posts[0].get("id")
         return None
